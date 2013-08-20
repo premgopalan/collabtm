@@ -32,7 +32,7 @@ typedef std::map<uint32_t, string> StrMapInv;
 
 typedef D1Array<std::vector<uint32_t> *> SparseMatrix;
 typedef std::vector<Rating> RatingList;
-typedef std::map<uint32_t, bool> NodeMap;
+typedef std::map<uint32_t, bool> UserMap;
 typedef std::map<uint32_t, bool> BoolMap;
 typedef std::map<uint32_t, double> DoubleMap;
 typedef std::map<uint32_t, Array *> ArrayMap;
@@ -61,6 +61,7 @@ public:
   uint32_t m;  // movies
   uint32_t k;
   uint32_t t;
+  uint32_t mini_batch_size;
 
   double a;
   double b;
@@ -179,6 +180,7 @@ Env::Env(uint32_t N, uint32_t M, uint32_t K, string fname,
     m(M),
     k(K),
     t(2),
+    mini_batch_size(100),
     a(.0), b(.0), c(.0), d(.0),
     tau0(0),
     tau1(0),

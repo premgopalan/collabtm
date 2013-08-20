@@ -63,7 +63,7 @@ Ratings::read_netflix_movie(string dir, uint32_t movie)
 
     uint32_t n = _user2seq[uid];
     info("n = %d, m = %d, rating = %d\n", n, m, rating);
-    yd[n][m] = rating;
+    yd[n][m] = rating >= 4 ? 1 : 0;
     _nratings++;
     _users[n]->push_back(m);
     _movies[m]->push_back(n);

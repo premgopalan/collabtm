@@ -10,7 +10,7 @@ public:
   ~GAPRec();
 
   void batch_infer();
-  //void infer();
+  void infer();
 
 private:
   void initialize();
@@ -25,7 +25,7 @@ private:
   
   void approx_log_likelihood();
   
-  void update_state();
+  void update_global_state();
   double pair_likelihood(uint32_t p, uint32_t q, yval_t y) const;
   void test_likelihood();
   void validation_likelihood();
@@ -34,7 +34,8 @@ private:
   void init_heldout();
   void set_test_sample(int s);
   void set_validation_sample(int s);
-  void get_random_rating(Rating &r) const;
+  void get_random_rating1(Rating &r) const;
+  void get_random_rating2(Rating &r) const;
   uint32_t duration() const;
   bool rating_ok(const Rating &e) const;
   bool is_test_rating(const Rating &e) const;
