@@ -31,6 +31,7 @@ public:
   ~Ratings() { }
 
   int read(string s);
+  const uint8_t rating_class(uint32_t v);
   
   const AdjMatrix &y() const { return _y; }
   AdjMatrix &y() { return _y; }
@@ -58,6 +59,7 @@ public:
 
 private:
   int read_netflix_movie(string dir, uint32_t movie);
+  int read_movielens(string dir);
   string movies_by_user_s() const;
   bool add_movie(uint32_t id);
   bool add_user(uint32_t id);
@@ -145,6 +147,13 @@ Ratings::get_movies(uint32_t a)
   assert (a < _users.size());
   const vector<uint32_t> *v = _users[a];
   return v;
+}
+
+inline const uint8_t
+Ratings::rating_class(uint32_t v)
+{
+  //return v >= 4  ? 1 : 0;
+  return v >= 1  ? 1 : 0;
 }
 
 #endif

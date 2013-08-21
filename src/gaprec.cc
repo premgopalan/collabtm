@@ -50,7 +50,8 @@ void
 GAPRec::init_heldout()
 {
   int s = _env.heldout_ratio * _ratings.nratings();
-  set_test_sample(s);
+  //set_test_sample(s);
+  load_test_sample();
   Env::plog("held-out ratio", _env.heldout_ratio);
   Env::plog("held-out ratings (ask)", s);
   Env::plog("held-out ratings (got)", _test_map.size());
@@ -134,6 +135,52 @@ GAPRec::initialize()
 }
 
 void
+GAPRec::load_test_sample()
+{
+  char buf[1024];
+  sprintf(buf, "%s/ml-1m_test.tsv", _env.datfname.c_str());
+
+  FILE *f = fopen(buf, "r");
+  if (!f) {
+    fprintf(stderr, "error: cannot open file %s:%s", buf, strerror(errno));
+    fclose(f);
+    exit(-1);
+  }
+  
+  uint32_t mid = 0, uid = 0, rating = 0;
+  uint32_t b;
+  while (!feof(f)) {
+    if (fscanf(f, "%u\t%u\t%u\n", &uid, &mid, &rating) < 0) {
+      printf("error: unexpected lines in file\n");
+      fclose(f);
+      exit(-1);
+    }
+
+    IDMap::const_iterator it = _ratings.user2seq().find(uid);
+    assert (it != _ratings.user2seq().end());
+    
+    IDMap::const_iterator mt = _ratings.movie2seq().find(mid);
+    if (mt == _ratings.movie2seq().end()) {
+      lerr("could not find movie %d in test set\n", mid);
+      continue;
+    }
+    
+    uint32_t m = mt->second;
+    uint32_t n = it->second;
+
+    Rating r(n,m);
+    _test_map2[r] = rating;
+    _test_ratings.push_back(r);
+  }
+  /*
+  FILE *hef = fopen(Env::file_str("/test-ratings.txt").c_str(), "w");  
+  fprintf(hef, "%s\n", ratingslist_s(_test_map2).c_str());
+  fclose(hef);
+  */
+  fclose(f);
+}
+
+void
 GAPRec::update_global_state()
 {
   set_gamma_exp1(_acurr, _bcurr, _Etheta);
@@ -167,7 +214,6 @@ GAPRec::set_ebeta_sum()
       _ebeta_sum[k] += ebeta[m][k];
   debug("ebeta sum set to %s\n", _ebeta_sum.s().c_str());
 }
-
 
 void
 GAPRec::set_to_prior_users(Matrix &a, Matrix &b)
@@ -228,7 +274,7 @@ GAPRec::batch_infer()
 	  phi[k] = elogtheta[n][k] + elogbeta[m][k];
 	phi.lognormalize();
 	phi.scale(y);
-
+	
 	_anext.add_slice(n, phi);
 	_cnext.add_slice(m, phi);
       }
@@ -250,160 +296,12 @@ GAPRec::batch_infer()
     if (_iter % _env.reportfreq == 0) {
       approx_log_likelihood();
       validation_likelihood();
-      test_likelihood();
+      //test_likelihood();
+      if (_iter > 0 && _iter % 1000 == 0)
+	auc();
     }
     _iter++;
   }
-}
-
-void
-GAPRec::optimize_user_shape_parameters(uint32_t n)
-{
-  Array old(_k), curr(_k), v(_k);
-  double **acurrd = _acurr.data();
-  for (uint32_t i = 0; i < _env.online_iterations; ++i)  {
-    for (uint32_t k = 0; k < _k; ++k)
-      old[k] = acurrd[n][k];
-    
-    optimize_user_shape_parameters_helper(n);
-    
-    for (uint32_t k = 0; k < _k; ++k)
-      curr[k] = acurrd[n][k];    
-    
-    sub(curr, old, v);
-    if (v.abs_mean() < _env.meanchangethresh)
-      break;
-  }
-}
-
-void
-GAPRec::optimize_user_shape_parameters_helper(uint32_t n)
-{  
-  const double  **elogtheta = _Elogtheta.const_data();
-  const double  **elogbeta = _Elogbeta.const_data();
-  const vector<uint32_t> *movies = _ratings.get_movies(n);
-  
-  for (uint32_t j = 0; j < movies->size(); ++j) {
-    uint32_t m = (*movies)[j];
-    
-    yval_t y = _ratings.r(n,m);
-    assert (y >= 0);
-    
-    Rating r(n,m);
-    if (!rating_ok(r))
-      continue;
-    
-    phi.zero();
-    for (uint32_t k = 0; k < _k; ++k)
-      phi[k] = elogtheta[n][k] + elogbeta[m][k];
-    phi.lognormalize();
-    phi.scale(y);
-    
-    _anext.add_slice(n, phi);
-    _cnext.add_slice(m, phi);
-  }
-
-  double **acurrd = _acurr.data();
-  double **anextd = _anext.data();
-  for (uint32_t k = 0; k < _k; ++k) {
-    acurrd[n][k] = anextd[n][k];
-    anextd[n][k] = _a;
-  }
-
-  set_gamma_exp1_idx(n, _acurr, _bcurr, _Etheta);
-  set_gamma_exp2_idx(n, _acurr, _bcurr, _Elogtheta);
-}
-
-void
-GAPRec::optimize_user_rate_parameters(uint32_t n)
-{
-  double **bcurrd = _bcurr.data();
-  double **bnextd = _bnext.data();
-  _bnext.add_slice(n, _ebeta_sum);
-  for (uint32_t k = 0; k < _k; ++k) {
-    bcurrd[n][k] = bnextd[n][k];
-    bnextd[n][k] = _b;
-  }
-}
-
-void
-GAPRec::recompute_etheta_sum(const UserMap &sampled_users, 
-			     const Array &etheta_sum_old)
-{
-  const double **etheta  = _Etheta.const_data();
-  for (uint32_t k = 0; k < _k; ++k)
-    _etheta_sum[k] -= etheta_sum_old[k];
-      
-  for (UserMap::const_iterator itr = sampled_users.begin();
-       itr != sampled_users.end(); ++itr) {
-    uint32_t user = itr->first;    
-    for (uint32_t k = 0; k < _k; ++k)
-	_etheta_sum[k] += etheta[user][k];
-  }
-}
-
-void
-GAPRec::infer()
-{
-  info("gaprec initialization done\n");
-
-  initialize();
-  approx_log_likelihood();
-  fflush(stdout);
-
-  Array phi(_k);
-  const double **etheta  = _Etheta.const_data();
-  while (1) {
-    Usermap sampled_users;
-    do {
-      uint32_t n = gsl_rng_uniform_int(_r, _n);
-      UserMap::const_iterator itr = sampled_users.find(n);
-      if (itr == sampled_users.end()) {
-	_anext.zero(n);
-	_bnext.zero(n);
-	sampled_users[n] = true;
-	set_gamma_exp1_idx(n, _acurr, _bcurr, _Etheta);
-	set_gamma_exp2_idx(n, _acurr, _bcurr, _Elogtheta);
-      }
-    } while (sampled_users.size() < _env.mini_batch_size);
-    
-    Array etheta_sum_old(_k);
-    for (UserMap::const_iterator itr = sampled_users.begin();
-	 itr != sampled_users.end(); ++itr) {
-      uint32_t user = itr->first;    
-      for (uint32_t k = 0; k < _k; ++k)
-	etheta_sum_old[k] += etheta[user][k];
-    }
-    
-    for (UserMap::const_iterator itr = sampled_users.begin();
-	 itr != sampled_users.end(); ++itr) {
-      uint32_t user = itr->first;
-      optimize_user_rate_parameters(user);
-      optimize_user_shape_parameters(user);
-    }
-    
-    recompute_etheta_sum(sampled_users, etheta_sum_old);
-    
-    for (uint32_t m = 0; m < _m; ++m)
-      _dnext.add_slice(m, _etheta_sum);
-
-    _acurr.reset(_anext);
-    _bcurr.reset(_bnext);
-    _ccurr.reset(_cnext);
-    _dcurr.reset(_dnext);
-
-    update_global_state();
-
-    printf("\r iteration %d", _iter);
-    fflush(stdout);
-
-    if (_iter % _env.reportfreq == 0) {
-      approx_log_likelihood();
-      test_likelihood();
-      validation_likelihood();
-    }
-
-    _iter++;
 }
 
 void
@@ -420,19 +318,6 @@ GAPRec::set_gamma_exp1(const Matrix &a, const Matrix &b, Matrix &v)
 }
 
 void
-GAPRec::set_gamma_exp1_idx(uint32_t u, 
-			   const Matrix &a, const Matrix &b, Matrix &v)
-{
-  const double ** const ad = a.const_data();
-  const double ** const bd = b.const_data();
-  double **vd = v.data();
-  for (uint32_t j = 0; j < b.n(); ++j) {
-    assert(bd[u][j]);
-    vd[u][j] = ad[u][j] / bd[u][j];
-  }
-}
-
-void
 GAPRec::set_gamma_exp2(const Matrix &a, const Matrix &b, Matrix &v)
 {
   const double ** const ad = a.const_data();
@@ -443,19 +328,6 @@ GAPRec::set_gamma_exp2(const Matrix &a, const Matrix &b, Matrix &v)
       assert(bd[i][j]);
       vd[i][j] = gsl_sf_psi(ad[i][j]) - log(bd[i][j]);
     }
-}
-
-void
-GAPRec::set_gamma_exp2_idx(uint32_t u, 
-			   const Matrix &a, const Matrix &b, Matrix &v)
-{
-  const double ** const ad = a.const_data();
-  const double ** const bd = b.const_data();
-  double **vd = v.data();
-  for (uint32_t j = 0; j < b.n(); ++j) {
-    assert(bd[u][j]);
-    vd[u][j] = gsl_sf_psi(ad[u][j]) - log(bd[u][j]);
-  }
 }
 
 void
@@ -544,8 +416,8 @@ GAPRec::test_likelihood()
 {
   uint32_t k = 0, kzeros = 0, kones = 0;
   double s = .0, szeros = 0, sones = 0;
-  for (SampleMap::const_iterator i = _test_map.begin();
-       i != _test_map.end(); ++i) {
+  for (CountMap::const_iterator i = _test_map2.begin();
+       i != _test_map2.end(); ++i) {
     const Rating &e = i->first;
     uint32_t n = e.first;
     uint32_t m = e.second;
@@ -554,11 +426,60 @@ GAPRec::test_likelihood()
     double u = pair_likelihood(n,m,r);
     s += u;
     k += 1;
-    info("n = %d, m  = %d, r = %d, u = %.5f\n", n, m, r, u);
+    info("test: n = %d, m  = %d, r = %d, u = %.5f\n", n, m, r, u);
   }
   info("s = %.5f\n", s);
   fprintf(_hf, "%d\t%d\t%.9f\t%d\n", _iter, duration(), s / k, k);
   fflush(_hf);
+}
+
+double
+GAPRec::link_prob(uint32_t user, uint32_t movie) const
+{
+  const double **etheta = _Etheta.const_data();
+  const double **ebeta = _Ebeta.const_data();
+  double s = .0;
+  for (uint32_t k = 0; k < _k; ++k)
+    s += etheta[user][k] * ebeta[movie][k];
+  if (s < 1e-30)
+    s = 1e-30;
+  double prob_zero = exp(-s);
+  return 1 - prob_zero;
+}
+
+void
+GAPRec::auc()
+{
+  FILE *f = fopen(Env::file_str("/ranking.txt").c_str(), "w");
+  for (uint32_t n = 0; n < _n; ++n) 
+    for (uint32_t m = 0; m < _m; ++m) {
+      if (_ratings.r(n,m) > 0)
+	continue;
+      double u = link_prob(n, m);
+
+      IDMap::const_iterator it = _ratings.seq2user().find(n);
+      assert (it != _ratings.seq2user().end());
+    
+      IDMap::const_iterator mt = _ratings.seq2movie().find(m);
+      if (mt == _ratings.seq2movie().end())
+	continue;
+      
+      uint32_t m2 = mt->second;
+      uint32_t n2 = it->second;
+      
+      Rating r(n,m);
+      CountMap::const_iterator itr = _test_map2.find(r);
+      if (itr != _test_map2.end()) {
+	int v = itr->second;
+	v = _ratings.rating_class(v);
+	fprintf(f, "%d\t%d\t%.5f\t%d\n", n2, m2, u, v);
+	fflush(f);
+      } else {
+	fprintf(f, "%d\t%d\t%.5f\t%d\n", n2, m2, u, 0);
+	fflush(f);
+      }
+    }
+  fclose(f);
 }
 
 void
@@ -608,8 +529,8 @@ GAPRec::get_random_rating1(Rating &r) const
 {
   do {
     uint32_t user = gsl_rng_uniform_int(_r, _n);
-    uint32_t movie = gsl_rng_uniform_int(_r, _m);    
-
+    uint32_t movie = gsl_rng_uniform_int(_r, _m);
+    
     if (_ratings.r(user, movie) > 0) {
       r.first = user;
       r.second = movie;

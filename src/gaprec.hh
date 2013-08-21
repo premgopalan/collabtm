@@ -24,6 +24,8 @@ private:
   void set_gamma_exp2(const Matrix &a, const Matrix &b, Matrix &v);
   
   void approx_log_likelihood();
+  void auc();
+  double link_prob(uint32_t user, uint32_t movie) const;
   
   void update_global_state();
   double pair_likelihood(uint32_t p, uint32_t q, yval_t y) const;
@@ -33,6 +35,7 @@ private:
 
   void init_heldout();
   void set_test_sample(int s);
+  void load_test_sample();
   void set_validation_sample(int s);
   void get_random_rating1(Rating &r) const;
   void get_random_rating2(Rating &r) const;
@@ -76,6 +79,7 @@ private:
   FILE *_af;
 
   SampleMap _test_map;
+  CountMap _test_map2;
   RatingList _test_ratings;
   SampleMap _validation_map;
   RatingList _validation_ratings;
