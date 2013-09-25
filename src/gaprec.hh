@@ -10,39 +10,101 @@ public:
   ~GAPRec();
 
   void batch_infer();
+  void batch_infer_bias();
   void infer();
+  void analyze();
+  void analyze_factors();
+  void gen_ranking_for_users();
+
 
 private:
   void initialize();
-  void set_to_prior_users(Matrix &a, Matrix &b);
-  void set_to_prior_movies(Matrix &a, Matrix &b);
+  void set_to_prior_users(Matrix &a, Array &b);
+  void set_to_prior_movies(Matrix &a, Array &b);
+  
+  void initialize_bias();
+  void set_to_prior_biases();
+  void update_global_state_bias();
+  void set_gamma_exp_bias(const Array &u, double v, Array &w1, Array &w2);
+  double link_prob_bias(uint32_t user, uint32_t movie) const;
+  double pair_likelihood_bias(uint32_t p, uint32_t q, yval_t y) const;
+
+
+  void save_model();
+  void write_movie_list(string label, uint32_t u, const vector<uint32_t> &movies);
+  void write_movie_list(string label, const vector<uint32_t> &movies);
+
+  void save_user_state(string s, const Matrix &mat);
+  void save_item_state(string s, const Matrix &mat);
+  void save_state(string s, const Array &mat);
+  void do_on_stop();
+
+  void load_file(string s, Matrix &mat);
+  void load_beta_and_theta();
+  void load_file(string s, Array &mat);
+
 
   void set_etheta_sum();
   void set_ebeta_sum();
+  void set_etheta_sum2();
+  void set_ebeta_sum2();
+  void load_validation_and_test_sets();
 
-  void set_gamma_exp1(const Matrix &a, const Matrix &b, Matrix &v);
-  void set_gamma_exp2(const Matrix &a, const Matrix &b, Matrix &v);
+  void set_gamma_exp(const Matrix &a, const Array &b, Matrix &v1, Matrix &v2);
+  void set_gamma_exp_init(const Matrix &a, Matrix &v1, Matrix &v2, double v);
+  void set_gamma_exp1(const Matrix &a, const Array &b, Matrix &v);
+  void set_gamma_exp2(const Matrix &a, const Array &b, Matrix &v);
+  void set_gamma_exp1_idx(uint32_t u, 
+			  const Matrix &a, const Matrix &b, Matrix &v);
+  void set_gamma_exp2_idx(uint32_t u, 
+			  const Matrix &a, const Matrix &b, Matrix &v);
+
+  void set_gamma_exp2_array(uint32_t u, 
+			    const Matrix &a, const Array &b, Matrix &v);
+  void set_gamma_exp1_array(uint32_t u, 
+			    const Matrix &a, const Array &b, Matrix &v);
+
+  void recompute_etheta_sum(const UserMap &sampled_users, 
+			    const Array &etheta_sum_old);
+
+  void compute_etheta_sum(const UserMap &sampled_users);
+  void compute_ebeta_sum(const MovieMap &sampled_movies);
+  void adjust_etheta_sum(const UserMap &sampled_users);
+  void adjust_ebeta_sum(const MovieMap &sampled_movies);
+
+
+  void optimize_user_rate_parameters(uint32_t n);
+  void optimize_user_shape_parameters_helper(uint32_t n, 
+					     Matrix &cphi);
+  void optimize_user_shape_parameters(uint32_t n);
+  void optimize_user_shape_parameters2(uint32_t n);
+
   
   void approx_log_likelihood();
-  void auc();
+  void auc(bool bias = false);
   double link_prob(uint32_t user, uint32_t movie) const;
   
   void update_global_state();
   double pair_likelihood(uint32_t p, uint32_t q, yval_t y) const;
+  double pair_likelihood_binary(uint32_t p, uint32_t q, yval_t y) const;
   void test_likelihood();
-  void validation_likelihood();
+  void validation_likelihood(bool bias = false);
   uint32_t factorial(uint32_t n) const;  
 
   void init_heldout();
   void set_test_sample(int s);
-  void load_test_sample();
+  void set_training_sample();
   void set_validation_sample(int s);
   void get_random_rating1(Rating &r) const;
   void get_random_rating2(Rating &r) const;
+  void get_random_rating3(Rating &r) const;
   uint32_t duration() const;
   bool rating_ok(const Rating &e) const;
   bool is_test_rating(const Rating &e) const;
-  string ratingslist_s(SampleMap &m);
+  void write_sample(FILE *, SampleMap &m);
+  void write_sample(FILE *, CountMap &m);
+  void write_ebeta(uint32_t);
+  void write_etheta(uint32_t);
 
   Env &_env;
   Ratings &_ratings;
@@ -60,13 +122,23 @@ private:
   time_t _start_time;
 
   Matrix _acurr;
-  Matrix _bcurr;
+  Array _bcurr;
   Matrix _ccurr;
-  Matrix _dcurr;
+  Array _dcurr;
   Matrix _anext;
-  Matrix _bnext;
+  Array _bnext;
   Matrix _cnext;
-  Matrix _dnext;
+  Array _dnext;
+  Array _phi;
+
+  Array _ucurr;
+  Array _icurr;
+  Array _unext;
+  Array _inext;
+  Array _Elogu;
+  Array _Eu;
+  Array _Elogi;
+  Array _Ei;
 
   Matrix _Elogtheta;
   Matrix _Etheta;
@@ -77,15 +149,29 @@ private:
   FILE *_hf;
   FILE *_vf;
   FILE *_af;
+  FILE *_pf;
 
-  SampleMap _test_map;
-  CountMap _test_map2;
+  CountMap _test_map;
   RatingList _test_ratings;
-  SampleMap _validation_map;
+  CountMap _validation_map;
   RatingList _validation_ratings;
+  UserMap _sampled_users;
+  UserMap _sampled_movies;
 
   Array _etheta_sum;
   Array _ebeta_sum;
+  Array _etheta_sum_old;
+  Array _ebeta_sum_old;
+  double _tau0;
+  double _kappa;
+  Array _rho;
+  
+  uint32_t _nh;
+  double _prev_h;
+  bool _save_ranking_file;
+  uArray _itemc;
+  bool _use_rate_as_score;
+  uint32_t _topN_by_user;
 };
 
 inline uint32_t
@@ -99,10 +185,10 @@ inline bool
 GAPRec::rating_ok(const Rating &r) const
 {
   assert (r.first  < _n && r.second < _m);
-  const SampleMap::const_iterator u = _test_map.find(r);
+  const CountMap::const_iterator u = _test_map.find(r);
   if (u != _test_map.end())
     return false;
-  const SampleMap::const_iterator w = _validation_map.find(r);
+  const CountMap::const_iterator w = _validation_map.find(r);
   if (w != _validation_map.end())
     return false;
   return true;
@@ -112,10 +198,12 @@ inline bool
 GAPRec::is_test_rating(const Rating &r) const
 {
   assert (r.first  < _n && r.second < _m);
-  const SampleMap::const_iterator u = _test_map.find(r);
+  const CountMap::const_iterator u = _test_map.find(r);
   if (u != _test_map.end())
     return true;
   return false;
 }
+
+
 
 #endif

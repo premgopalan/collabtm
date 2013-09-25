@@ -53,6 +53,11 @@ public:
   double logsum() const;
   bool dim_equal(const D1Array<T> &a) const;
   int first_positive_idx() const;
+  double abs_mean() const;
+
+  void reset(D1Array<T> &u);
+  void reset();
+  void swap(D1Array<T> &u);
 
   T *data() { return _data; }
   const T * const data() const {return (const T *)_data;}
@@ -107,6 +112,18 @@ D1Array<std::vector<uint32_t> *>::D1Array(uint32_t n, bool zero)
   :_n(n)
 {
   typedef std::vector<uint32_t> * X;
+  _data = new X[n];
+  if (zero) {
+    for (uint32_t i = 0; i < n; ++i)
+      _data[i] = NULL;
+  }
+}
+
+template<> inline
+D1Array<std::vector<Rating> *>::D1Array(uint32_t n, bool zero)
+  :_n(n)
+{
+  typedef std::vector<Rating> * X;
   _data = new X[n];
   if (zero) {
     for (uint32_t i = 0; i < n; ++i)
@@ -177,6 +194,16 @@ D1Array<KV>::zero()
     _data[i].first = 0;  
     _data[i].second = 0;  
   }
+}
+
+
+template<class T> inline double
+D1Array<T>::abs_mean() const
+{
+  double s = .0;
+  for (uint32_t j = 0; j < _n; ++j)
+    s += fabs(_data[j]);
+  return s / _n;
 }
 
 template<class T> inline void
@@ -374,6 +401,28 @@ D1Array<T>::first_positive_idx() const
   return -1;
 }
 
+template<class T> inline void
+D1Array<T>::reset(D1Array<T> &u)
+{
+  delete[] _data;
+  _data = u.data();
+  u.reset();
+}
+
+template<class T> inline void
+D1Array<T>::reset()
+{
+  _data = new T[_n];
+  // note: random init
+}
+
+template<class T> inline void
+D1Array<T>::swap(D1Array<T> &u)
+{
+  T *d = _data;
+  _data = u.data();
+  u._data = d;
+}
 
 template<class T> inline D1Array<T> &
 D1Array<T>::operator*=(T u)
@@ -680,6 +729,7 @@ public:
   
   void set_elements(T v);
   void set_elements(uint32_t m, const Array &v);
+  void set_elements(uint32_t m, T v);
   double dot(uint32_t i, uint32_t j);
   void zero();
   void zero(uint32_t a);
@@ -693,6 +743,7 @@ public:
 
   void reset(D2Array<T> &u);
   void reset();
+  void swap(D2Array<T> &u);
 
   string s() const;
 
@@ -767,6 +818,13 @@ D2Array<T>::set_elements(uint32_t m, const Array &v)
 }
 
 template<class T> inline void
+D2Array<T>::set_elements(uint32_t m, T v)
+{
+  for (uint32_t j = 0; j < _n; ++j)
+    _data[m][j] = v;
+}
+
+template<class T> inline void
 D2Array<T>::reset(D2Array<T> &u)
 {
   for (uint32_t i = 0; i < _m; ++i)
@@ -783,6 +841,14 @@ D2Array<T>::reset()
   for (uint32_t i = 0; i < _m; ++i)
     _data[i] = new T[_n];
   // note: random init
+}
+
+template<class T> inline void
+D2Array<T>::swap(D2Array<T> &u)
+{
+  T **d = _data;
+  _data = u.data();
+  u._data = d;
 }
 
 template<class T> inline void
@@ -860,7 +926,7 @@ D2Array<T>::sum(uint32_t p) const
 template<class T> inline void
 D2Array<T>::add_slice(uint32_t p, const D1Array<T> &u)
 {
-  assert (_n == u.n());
+  assert (_n <= u.n());
   const T * const ud = u.data();  
   for (uint32_t i = 0; i < u.n(); ++i)
     _data[p][i] += ud[i];

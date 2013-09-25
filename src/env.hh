@@ -23,7 +23,9 @@ typedef D2Array<yval_t> AdjMatrix;
 typedef D2Array<double> Matrix;
 typedef D3Array<double> D3;
 typedef D2Array<KV> MatrixKV;
+typedef D1Array<KV> KVArray;
 
+typedef std::map<uint32_t, yval_t> RatingMap;
 typedef std::map<uint32_t, uint32_t> IDMap;
 typedef std::map<uint32_t, uint32_t> FreqMap;
 typedef std::map<string, uint32_t> FreqStrMap;
@@ -31,12 +33,14 @@ typedef std::map<string, uint32_t> StrMap;
 typedef std::map<uint32_t, string> StrMapInv;
 
 typedef D1Array<std::vector<uint32_t> *> SparseMatrix;
+typedef D1Array<RatingMap *> SparseMatrixR;
 typedef std::vector<Rating> RatingList;
 typedef std::map<uint32_t, bool> UserMap;
+typedef std::map<uint32_t, bool> MovieMap;
 typedef std::map<uint32_t, bool> BoolMap;
 typedef std::map<uint32_t, double> DoubleMap;
 typedef std::map<uint32_t, Array *> ArrayMap;
-typedef std::map<uint32_t, uint32_t> NodeValMap;
+typedef std::map<uint32_t, uint32_t> ValMap;
 typedef std::map<uint32_t, vector<uint32_t> > MapVec;
 typedef MapVec SparseMatrix2;
 typedef std::map<Rating, bool> SampleMap;
@@ -46,17 +50,23 @@ typedef std::map<uint32_t, string> StrMapInv;
 
 class Env {
 public:
+  typedef enum { NETFLIX, MOVIELENS, MENDELEY, ECHONEST } Dataset;
+  typedef enum { CREATE_TRAIN_TEST_SETS, TRAINING } Mode;
   Env(uint32_t N, uint32_t M, uint32_t K, string fname, 
       bool nmi, string ground_truth_fname, uint32_t rfreq,
       bool strid, string label, bool alogl, double rseed,
       uint32_t max_iterations, bool load, string loc, 
-      bool gen_hout);
+      bool gen_hout,
+      double av, double bv, double cv, double dv,
+      Env::Dataset d, bool batch, bool binary_data, 
+      bool bias, bool explore);
 
   ~Env() { fclose(_plogf); }
 
   static string prefix;
   static Logger::Level level;
 
+  Dataset dataset;
   uint32_t n;  // users
   uint32_t m;  // movies
   uint32_t k;
@@ -81,7 +91,7 @@ public:
   bool logl;
   uint32_t max_iterations;
   double seed;
-  bool terminate;
+  bool save_state_now;
   string datfname;
   string label;
   bool nmi;
@@ -89,6 +99,13 @@ public:
   bool model_load;
   string model_location;
   bool gen_heldout;
+  uint32_t online_iterations;
+  double meanchangethresh;
+  bool batch;
+  Mode mode;
+  bool binary_data;
+  bool bias;
+  bool explore;
 
   template<class T> static void plog(string s, const T &v);
   static string file_str(string fname);
@@ -175,16 +192,20 @@ Env::Env(uint32_t N, uint32_t M, uint32_t K, string fname,
 	 bool nmival, string gfname, uint32_t rfreq,
 	 bool sid, string lbl, bool alogl, double rseed,
 	 uint32_t maxitr, bool load, 
-	 string loc, bool gen_hout)
-  : n(N),
+	 string loc, bool gen_hout,
+	 double av, double bv, double cv, double dv,
+	 Env::Dataset datasetv, bool batchv, 
+	 bool binary_datav, bool biasv, bool explore)
+  : dataset(datasetv),
+    n(N),
     m(M),
     k(K),
     t(2),
-    mini_batch_size(100),
-    a(.0), b(.0), c(.0), d(.0),
+    mini_batch_size(1000),
+    a(av), b(bv), c(cv), d(dv),
     tau0(0),
     tau1(0),
-    heldout_ratio(0.001),
+    heldout_ratio(0.2),
     validation_ratio(0.01),
     reportfreq(rfreq),
     epsilon(0.001),
@@ -194,14 +215,20 @@ Env::Env(uint32_t N, uint32_t M, uint32_t K, string fname,
     logl(alogl),
     max_iterations(maxitr),
     seed(rseed),
-    terminate(false),
+    save_state_now(false),
     datfname(fname),
     label(lbl),
     nmi(nmival),
     ground_truth_fname(gfname),
     model_load(load),
     model_location(loc),
-    gen_heldout(gen_hout)
+    gen_heldout(gen_hout),
+    online_iterations(1),
+    meanchangethresh(0.001),
+    batch(batchv),
+    mode(TRAINING),
+    binary_data(binary_datav),
+    bias(biasv)
 {
   ostringstream sa;
   sa << "n" << n << "-";
@@ -215,9 +242,32 @@ Env::Env(uint32_t N, uint32_t M, uint32_t K, string fname,
       sa << "-" << q;
   }
 
-  if (!gen_heldout)
-    sa << "-batch";
+  if (a != 0.3)
+    sa << "-a" << a;
 
+  if (b != 0.3)
+    sa << "-b" << b;
+
+  if (c != 0.3)
+    sa << "-c" << c;
+
+  if (d != 0.3)
+    sa << "-d" << d;
+
+  if (batch)
+    sa << "-batch";
+  else
+    sa << "-online";
+
+  if (binary_data)
+    sa << "-bin";
+  
+  if (bias)
+    sa << "-bias";
+
+  if (explore)
+    sa << "-explore";
+  
   prefix = sa.str();
   level = Logger::TEST;
 
@@ -231,24 +281,23 @@ Env::Env(uint32_t N, uint32_t M, uint32_t K, string fname,
     printf("cannot open param file:%s\n",  strerror(errno));
     exit(-1);
   }
-  
+
   plog("n", n);
   plog("k", k);
   plog("t", t);
-  plog("alpha", alpha);
-  plog("heldout_ratio", heldout_ratio);
+  plog("test_ratio", heldout_ratio);
   plog("validation_ratio", validation_ratio);
-  plog("nolambda", nolambda);
-  plog("max iterations", max_iterations);
   plog("seed", seed);
-  plog("gen_heldout", gen_heldout);
-  plog("model_location", model_location);
-  plog("load", model_load);
-
-  string ndatfname = file_str("/network.dat");
-  unlink(ndatfname.c_str());
-  assert (symlink(datfname.c_str(), ndatfname.c_str()) >= 0);
-  unlink(file_str("/mutual.txt").c_str());
+  plog("a", a);
+  plog("b", b);
+  plog("c", c);
+  plog("d", d);
+  plog("reportfreq", reportfreq);
+  
+  //string ndatfname = file_str("/network.dat");
+  //unlink(ndatfname.c_str());
+  //assert (symlink(datfname.c_str(), ndatfname.c_str()) >= 0);
+  //unlink(file_str("/mutual.txt").c_str());
 }
 
 /*
