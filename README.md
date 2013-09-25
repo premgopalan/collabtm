@@ -26,25 +26,25 @@ GAPREC: Gamma Poisson factorization based recommendation tool
            	     train.tsv, test.tsv, validation.tsv
 		     (for examples, see example/movielens-1m)
  
-    -m <int>	  number of items
-    -n <int>	  number of users
-    -k <int>	  number of factors
+    -m <int>	     number of items
+    -n <int>	     number of users
+    -k <int>	     number of factors
    
-    -rfreq <int>  assess convergence and compute other stats 
-   		  <int> number of iterations
-		  default: 10
+    -rfreq <int>     assess convergence and compute other stats 
+   		     <int> number of iterations
+		     default: 10
 
     -a
-    -b		  set hyperparameters
-    -c		  default: a = b = c = d = 0.3
+    -b		     set hyperparameters
+    -c		     default: a = b = c = d = 0.3
     -d
 
-    -bias	  use user and item bias terms
-    -binary-data  treat observed data as binary
-   		  (if rating > 0 then rating is treated as 1)
+    -bias	     use user and item bias terms
+    -binary-data     treat observed data as binary
+   		     (if rating > 0 then rating is treated as 1)
 
-    -gen-ranking  generate ranking file to use in precision 
-   		  computation; see example		  
+    -gen-ranking     generate ranking file to use in precision 
+   		     computation; see example		  
 
 
 Example
