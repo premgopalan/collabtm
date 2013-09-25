@@ -45,7 +45,7 @@ main(int argc, char **argv)
   uint32_t n = 0, m = 0;
   uint32_t k = 0;
   string ground_truth_fname;
-  uint32_t rfreq = 1;
+  uint32_t rfreq = 10;
   string label;
   bool logl = false;
   uint32_t max_iterations = 1000;
@@ -185,8 +185,7 @@ main(int argc, char **argv)
   if (explore) {
     ratings.load_movies_metadata(fname.c_str());
     GAPRec gaprec(env, ratings);
-    //gaprec.analyze_factors();
-    gaprec.analyze2();
+    gaprec.analyze_factors();
     exit(0);
   }
 

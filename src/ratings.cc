@@ -36,8 +36,6 @@ Ratings::read(string s)
 int
 Ratings::read_generic_train(string dir)
 {
-  printf("within read_generic_train\n");
-  fflush(stdout);
   char buf[1024];
   sprintf(buf, "%s/train.tsv", dir.c_str());
   FILE *f = fopen(buf, "r");

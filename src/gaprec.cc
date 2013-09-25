@@ -86,7 +86,7 @@ GAPRec::load_validation_and_test_sets()
   assert(testf);
   _ratings.read_generic(testf, &_test_map);
   fclose(testf);
-  printf("loaded validation and test sets\n");
+  printf("+ loaded validation and test sets from %s\n", _env.datfname.c_str());
   fflush(stdout);
   Env::plog("test ratings", _test_map.size());
   Env::plog("validation ratings", _validation_map.size());
@@ -428,9 +428,6 @@ GAPRec::batch_infer()
       save_model();
       _env.save_state_now = false;
     }
-
-    save_model();
-    exit(0);
 
     if (_iter % _env.reportfreq == 0) {
       lerr("computing validation likelihood");
@@ -1049,7 +1046,7 @@ GAPRec::auc(bool bias)
   uint32_t total_users = 0;
   FILE *f = 0;
   if (_save_ranking_file)
-    f = fopen(Env::file_str("/ranking.txt").c_str(), "w");
+    f = fopen(Env::file_str("/ranking.tsv").c_str(), "w");
   
   if (!_save_ranking_file) {
     _sampled_users.clear();
@@ -1454,27 +1451,8 @@ GAPRec::gen_ranking_for_users()
   _save_ranking_file = true;
   auc(_env.bias);
   _save_ranking_file = false;
-}
-
-void
-GAPRec::analyze2()
-{
-  const double **etheta = _Etheta.const_data();
-  const double **ebeta = _Ebeta.const_data();
-  load_beta_and_theta();
-
-  const IDMap &m2seq = _ratings.movie2seq();
-
-  uint32_t mov = 17714;
-  IDMap::const_iterator it = m2seq.find(mov);
-  uint32_t seq  = it->second;
-
-  lerr("SEQ = %d", seq);
-  const vector<uint32_t> *u = _ratings.get_users(seq);
-  if (u)
-    lerr("users of %d = %d", mov, u->size());
-  else
-    lerr("zero users of %d", mov);
+  printf("DONE writing ranking.tsv in output directory\n");
+  fflush(stdout);
 }
 
 void
