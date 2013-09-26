@@ -45,7 +45,17 @@ GAPREC: Gamma Poisson factorization based recommendation tool
 Example
 --------
 
-../src/gaprec -dir ../example/movielens -n 6040 -m 3900  -k 100 -rfreq 10
+Input:
+
+You need 4 files: train.tsv, test.tsv, validation.tsv and
+test_users.tsv The first 3 files are splits of the full ratings
+dataset. Column 0 is user id, column 1 is item id and column 2 is the
+rating. All 3 values are expected to be positive integers. The
+test_users.tsv file is a list of user ids that you want to generate
+the ranking file for (see step 2 below). Except for very large
+datasets, this set can be the full set of users ids.
+
+(1) ../src/gaprec -dir ../example/movielens -n 6040 -m 3900  -k 100 -rfreq 10
 
 This will write output in n6040-m3900-k100-batch:
 
@@ -60,14 +70,20 @@ This will write output in n6040-m3900-k100-batch:
 To generate the ranking file (ranking.tsv) for precision computation,
 run the following:
 
-cd n6040-m3900-k100-batch;
+(2) cd n6040-m3900-k100-batch;
 ../../src/gaprec -dir ../../example/movielens -n 6040 -m 3900  -k 100 -rfreq 10 -gen-ranking
 
 This will rank all y == 0 in training and the test.tsv pairs in
 decreasing order of their scores, along with true ratings from
-test.tsv.
+test.tsv. Note that to step 2 you will need the test_users.tsv file.
 
 The output is now in n6040-m3900-k100-batch/ranking.tsv.
+
+Instead of (1) you could also run one of these:
+
+../src/gaprec -dir ../example/movielens -n 6040 -m 3900  -k 100 -rfreq 10 -bias
+../src/gaprec -dir ../example/movielens -n 6040 -m 3900  -k 100 -rfreq 10 -binary-data
+../src/gaprec -dir ../example/movielens -n 6040 -m 3900  -k 100 -rfreq 10 -binary-data -bias
 
 Bias terms
 ----------
