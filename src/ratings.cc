@@ -48,6 +48,8 @@ Ratings::read_generic_train(string dir)
   read_generic(f, NULL);
   fclose(f);
   Env::plog("training ratings", _nratings);
+
+  read_mendeley_docs(dir);
 }
 
 int
