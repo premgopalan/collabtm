@@ -10,7 +10,7 @@ Ratings::read(string s)
 
   if (_env.mode == Env::CREATE_TRAIN_TEST_SETS) {
     if (_env.dataset == Env::NETFLIX) {
-      for (uint32_t i = 0; i < _env.m; ++i) {
+      for (uint32_t i = 0; i < _env.ndocs; ++i) {
 	if (read_netflix_movie(s,i+1) < 0) {
 	  lerr("error adding movie %d\n", i);
 	  return -1;
@@ -284,6 +284,65 @@ Ratings::read_mendeley(string dir)
 	     _curr_user_seq, _curr_movie_seq, _nratings);
       fflush(stdout);
     }
+  }
+  fclose(f);
+  return 0;
+}
+
+int
+Ratings::read_mendeley_docs(string dir)
+{
+  char buf[1024];
+  sprintf(buf, "%s/mult.dat", dir.c_str());
+  
+  info("reading from %s\n", buf);
+
+  FILE *f = fopen(buf, "r");
+  if (!f) {
+    fprintf(stderr, "error: cannot open file %s:%s", buf, strerror(errno));
+    fclose(f);
+    exit(-1);
+  }
+
+  uint32_t docid = 1;
+  char b[128];
+  while (!feof(f)) {
+    vector<uint32_t> mids;
+    uint32_t len = 0;
+    if (fscanf(f, "%u\t", &len) < 0) {
+      printf("error: unexpected lines in file\n");
+      fclose(f);
+      exit(-1);
+    }
+    
+    uint32_t wid = 1, wc = 0;
+    for (uint32_t i = 0; i < len; ++i) {
+      if (i == len - 1) {
+	if (fscanf(f, "%u:%u\n", &wid, &wc) < 0) {
+	  printf("error: unexpected lines in file\n");
+	  fclose(f);
+	  exit(-1);
+	}
+      } else {
+	if (fscanf(f, "%u:%u\t", &wid, &wc) < 0) {
+	  printf("error: unexpected lines in file\n");
+	  fclose(f);
+	  exit(-1);
+	}
+      }
+      
+      if (!_docs2words[docid]) {
+	WordVec **wm = _docs2words.data();
+	wm[docid] = new WordVec;
+      } 
+      WordVec *wm = _docs2words[docid];
+      wm->push_back(WordCount(wid, wc));
+    }
+    docid++;
+  }
+  if (_nratings % 1000 == 0) {
+    printf("\r+ read %d documents", docid);
+    fflush(stdout);
   }
   fclose(f);
   return 0;

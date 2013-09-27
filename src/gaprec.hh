@@ -152,9 +152,9 @@ private:
   FILE *_pf;
 
   CountMap _test_map;
-  RatingList _test_ratings;
+  RatingVec _test_ratings;
   CountMap _validation_map;
-  RatingList _validation_ratings;
+  RatingVec _validation_ratings;
   UserMap _sampled_users;
   UserMap _sampled_movies;
 

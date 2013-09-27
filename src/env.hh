@@ -26,15 +26,21 @@ typedef D2Array<KV> MatrixKV;
 typedef D1Array<KV> KVArray;
 
 typedef std::map<uint32_t, yval_t> RatingMap;
+typedef std::map<uint32_t, uint16_t> WordMap;
+
 typedef std::map<uint32_t, uint32_t> IDMap;
 typedef std::map<uint32_t, uint32_t> FreqMap;
 typedef std::map<string, uint32_t> FreqStrMap;
 typedef std::map<string, uint32_t> StrMap;
 typedef std::map<uint32_t, string> StrMapInv;
 
+typedef std::vector<Rating> RatingVec;
+typedef std::vector<WordCount> WordVec;
+
 typedef D1Array<std::vector<uint32_t> *> SparseMatrix;
-typedef D1Array<RatingMap *> SparseMatrixR;
-typedef std::vector<Rating> RatingList;
+typedef D1Array<RatingMap *> SparseRatingMatrix;
+typedef D1Array<WordVec *> SparseWordMatrix;
+
 typedef std::map<uint32_t, bool> UserMap;
 typedef std::map<uint32_t, bool> MovieMap;
 typedef std::map<uint32_t, bool> BoolMap;
@@ -52,12 +58,13 @@ class Env {
 public:
   typedef enum { NETFLIX, MOVIELENS, MENDELEY, ECHONEST } Dataset;
   typedef enum { CREATE_TRAIN_TEST_SETS, TRAINING } Mode;
-  Env(uint32_t N, uint32_t M, uint32_t K, string fname, 
+
+  Env(uint32_t ndocs_v, uint32_t nvocab_v,
+      uint32_t nusers_v, uint32_t K, string fname, 
       bool nmi, string ground_truth_fname, uint32_t rfreq,
       bool strid, string label, bool alogl, double rseed,
       uint32_t max_iterations, bool load, string loc, 
       bool gen_hout,
-      double av, double bv, double cv, double dv,
       Env::Dataset d, bool batch, bool binary_data, 
       bool bias, bool explore);
 
@@ -67,16 +74,11 @@ public:
   static Logger::Level level;
 
   Dataset dataset;
-  uint32_t n;  // users
-  uint32_t m;  // movies
-  uint32_t k;
-  uint32_t t;
-  uint32_t mini_batch_size;
 
-  double a;
-  double b;
-  double c;
-  double d;
+  uint32_t ndocs;
+  uint32_t nvocab;
+  uint32_t nusers;
+  uint32_t k;
 
   double alpha;
   double tau0;
@@ -188,21 +190,20 @@ Env::file_str(string fname)
 }
 
 inline
-Env::Env(uint32_t N, uint32_t M, uint32_t K, string fname, 
+Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
+	 uint32_t nusers_v, 
+	 uint32_t K, string fname, 
 	 bool nmival, string gfname, uint32_t rfreq,
 	 bool sid, string lbl, bool alogl, double rseed,
 	 uint32_t maxitr, bool load, 
 	 string loc, bool gen_hout,
-	 double av, double bv, double cv, double dv,
 	 Env::Dataset datasetv, bool batchv, 
 	 bool binary_datav, bool biasv, bool explore)
   : dataset(datasetv),
-    n(N),
-    m(M),
+    ndocs(ndocs_v),
+    nvocab(nvocab_v),
+    nusers(nusers_v),
     k(K),
-    t(2),
-    mini_batch_size(1000),
-    a(av), b(bv), c(cv), d(dv),
     tau0(0),
     tau1(0),
     heldout_ratio(0.2),
@@ -231,8 +232,9 @@ Env::Env(uint32_t N, uint32_t M, uint32_t K, string fname,
     bias(biasv)
 {
   ostringstream sa;
-  sa << "n" << n << "-";
-  sa << "m" << m << "-";
+  sa << "nusers" << nusers << "-";
+  sa << "ndocs" << ndocs << "-";
+  sa << "nvocab" << nvocab << "-";
   sa << "k" << k;
   if (label != "")
     sa << "-" << label;
@@ -241,18 +243,6 @@ Env::Env(uint32_t N, uint32_t M, uint32_t K, string fname,
     if (isalpha(q[0]))
       sa << "-" << q;
   }
-
-  if (a != 0.3)
-    sa << "-a" << a;
-
-  if (b != 0.3)
-    sa << "-b" << b;
-
-  if (c != 0.3)
-    sa << "-c" << c;
-
-  if (d != 0.3)
-    sa << "-d" << d;
 
   if (batch)
     sa << "-batch";
@@ -267,7 +257,7 @@ Env::Env(uint32_t N, uint32_t M, uint32_t K, string fname,
 
   if (explore)
     sa << "-explore";
-  
+
   prefix = sa.str();
   level = Logger::TEST;
 
@@ -282,16 +272,13 @@ Env::Env(uint32_t N, uint32_t M, uint32_t K, string fname,
     exit(-1);
   }
 
-  plog("n", n);
+  plog("ndocs", ndocs);
+  plog("nusers", nusers);
+  plog("nvocab", nvocab);
   plog("k", k);
-  plog("t", t);
   plog("test_ratio", heldout_ratio);
   plog("validation_ratio", validation_ratio);
   plog("seed", seed);
-  plog("a", a);
-  plog("b", b);
-  plog("c", c);
-  plog("d", d);
   plog("reportfreq", reportfreq);
   
   //string ndatfname = file_str("/network.dat");

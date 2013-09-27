@@ -22,7 +22,7 @@ GAPREC: Gamma Poisson factorization based recommendation tool
 
 **gaprec** [OPTIONS]
 
-    -dir <string>    path to dataset directory with 3 files: train.tsv, test.tsv, validation.tsv (for examples, see example/movielens-1m)
+-dir <string>    path to dataset directory with 3 files: train.tsv, test.tsv, validation.tsv, test_users.tsv (for examples, see example/movielens)
  
     -m <int>	     number of items
     -n <int>	     number of users
@@ -73,9 +73,10 @@ run the following:
 (2) cd n6040-m3900-k100-batch;
 ../../src/gaprec -dir ../../example/movielens -n 6040 -m 3900  -k 100 -rfreq 10 -gen-ranking
 
-This will rank all y == 0 in training and the test.tsv pairs in
+This will rank the y == 0 in training and the test.tsv pairs in
 decreasing order of their scores, along with true ratings from
-test.tsv. Note that to step 2 you will need the test_users.tsv file.
+test.tsv. This ranking is done only for the users in test_users.tsv.
+So to run step 2 you will need the test_users.tsv file.
 
 The output is now in n6040-m3900-k100-batch/ranking.tsv.
 
@@ -92,7 +93,11 @@ To model user activity and item popularity, bias parameters are
 additionally inferred for each user and item. The new \theta and \beta
 are as follows:
     		  
-\theta_u' = [\theta_u, 1, g_u]
-\beta_i' =  [\beta_i, h_i, 1]   
+    \theta_u' = [\theta_u, 1, g_u]
+    \beta_i' =  [\beta_i, h_i, 1]   
 
 
+Exploratory analysis
+--------------------
+
+The code can do exploratory analysis using meta-data, e.g., movie titles. So you find a movies.tsv in the examples/movielens. But this code is still hard-wired to the specific dataset, and has not been cleaned up for general use.

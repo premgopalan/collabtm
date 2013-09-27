@@ -24,6 +24,13 @@ public:
 };
 typedef std::pair<Rating, double> RatingV;
 
+class WordCount: public std::pair<uint32_t, uint16_t> {
+public:
+  typedef std::pair<uint32_t, uint16_t>  inherited;
+  WordCount(): inherited() { }
+  WordCount(uint32_t a, uint16_t b): inherited(a,b) { }
+};
+
 using namespace std;
 
 #define ROW_LIMIT 512

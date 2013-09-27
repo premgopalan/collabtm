@@ -20,9 +20,10 @@ using namespace std;
 class Ratings {
 public:
   Ratings(Env &env):
-    _users2rating(env.n),
-    _users(env.n),
-    _movies(env.m),
+    _users2rating(env.nusers),
+    _users(env.nusers),
+    _movies(env.ndocs),
+    _docs2words(env.ndocs),
     _env(env),
     _curr_user_seq(0), 
     _curr_movie_seq(0),
@@ -48,6 +49,7 @@ public:
  
   const vector<uint32_t> *get_users(uint32_t a);
   const vector<uint32_t> *get_movies(uint32_t a);
+  const WordVec *get_words(uint32_t docid);
 
   const IDMap &user2seq() const { return _user2seq; }
   const IDMap &seq2user() const { return _seq2user; }
@@ -70,14 +72,18 @@ private:
   int read_movielens_metadata(string dir);
   int read_netflix_metadata(string dir);
   int read_mendeley_metadata(string dir);
+  int read_mendeley_docs(string dir);
+  
   string movies_by_user_s() const;
   bool add_movie(uint32_t id);
   bool add_user(uint32_t id);
 
-  SparseMatrixR _users2rating;
+  SparseRatingMatrix _users2rating;
   SparseMatrix _users;
   SparseMatrix _movies;
   vector<Rating> _ratings;
+
+  SparseWordMatrix _docs2words;
 
   Env &_env;
   IDMap _user2seq;
@@ -110,8 +116,8 @@ Ratings::m() const
 inline bool
 Ratings::add_user(uint32_t id)
 {
-  if (_curr_user_seq >= _env.n) {
-    lerr("max users %d reached", _env.n);
+  if (_curr_user_seq >= _env.nusers) {
+    lerr("max users %d reached", _env.nusers);
     return false;
   }
   _user2seq[id] = _curr_user_seq;
@@ -129,8 +135,8 @@ Ratings::add_user(uint32_t id)
 inline bool
 Ratings::add_movie(uint32_t id)
 {
-  if (_curr_movie_seq >= _env.m) {
-    lerr("max movies %d reached", _env.m);
+  if (_curr_movie_seq >= _env.ndocs) {
+    lerr("max movies %d reached", _env.ndocs);
     return false;
   }
   _movie2seq[id] = _curr_movie_seq;
@@ -146,7 +152,7 @@ Ratings::add_movie(uint32_t id)
 inline uint32_t
 Ratings::r(uint32_t a, uint32_t b) const
 {
-  assert (a < _env.n && b < _env.m);
+  assert (a < _env.nusers && b < _env.ndocs);
   const RatingMap *rm = _users2rating[a];
   assert(rm);
   const RatingMap &rmc = *rm;
@@ -170,6 +176,14 @@ Ratings::get_movies(uint32_t a)
   return v;
 }
 
+inline const WordVec *
+Ratings::get_words(uint32_t docid)
+{
+  assert (docid < _env.ndocs);
+  const WordVec *v = _docs2words[docid];
+  return v;
+}
+
 inline const uint8_t
 Ratings::rating_class(uint32_t v)
 {
@@ -179,7 +193,7 @@ Ratings::rating_class(uint32_t v)
 inline string
 Ratings::movie_name(uint32_t movie_seq) const
 {
-  assert (movie_seq < _env.m);
+  assert (movie_seq < _env.ndocs);
   StrMapInv::const_iterator i = _movie_names.find(movie_seq);
   if (i != _movie_names.end())
     return i->second;
@@ -189,7 +203,7 @@ Ratings::movie_name(uint32_t movie_seq) const
 inline string
 Ratings::movie_type(uint32_t movie_seq) const
 {
-  assert (movie_seq < _env.m);
+  assert (movie_seq < _env.ndocs);
   StrMapInv::const_iterator i = _movie_types.find(movie_seq);
   if (i != _movie_types.end())
     return i->second;

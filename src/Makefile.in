@@ -32,7 +32,7 @@ POST_INSTALL = :
 NORMAL_UNINSTALL = :
 PRE_UNINSTALL = :
 POST_UNINSTALL = :
-bin_PROGRAMS = gaprec$(EXEEXT) roc$(EXEEXT)
+bin_PROGRAMS = collabtm$(EXEEXT) roc$(EXEEXT)
 subdir = src
 DIST_COMMON = $(srcdir)/Makefile.am $(srcdir)/Makefile.in
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
@@ -44,10 +44,10 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
-am_gaprec_OBJECTS = ratings.$(OBJEXT) main.$(OBJEXT) log.$(OBJEXT) \
-	gaprec.$(OBJEXT)
-gaprec_OBJECTS = $(am_gaprec_OBJECTS)
-gaprec_LDADD = $(LDADD)
+am_collabtm_OBJECTS = ratings.$(OBJEXT) main.$(OBJEXT) log.$(OBJEXT) \
+	collabtm.$(OBJEXT)
+collabtm_OBJECTS = $(am_collabtm_OBJECTS)
+collabtm_LDADD = $(LDADD)
 am_roc_OBJECTS = roceasy.$(OBJEXT)
 roc_OBJECTS = $(am_roc_OBJECTS)
 roc_DEPENDENCIES =
@@ -64,8 +64,8 @@ CXXCOMPILE = $(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) \
 CXXLD = $(CXX)
 CXXLINK = $(CXXLD) $(AM_CXXFLAGS) $(CXXFLAGS) $(AM_LDFLAGS) $(LDFLAGS) \
 	-o $@
-SOURCES = $(gaprec_SOURCES) $(roc_SOURCES)
-DIST_SOURCES = $(gaprec_SOURCES) $(roc_SOURCES)
+SOURCES = $(collabtm_SOURCES) $(roc_SOURCES)
+DIST_SOURCES = $(collabtm_SOURCES) $(roc_SOURCES)
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
@@ -160,7 +160,7 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-gaprec_SOURCES = env.hh ratings.hh ratings.cc matrix.hh main.cc log.cc log.hh gaprec.hh gaprec.cc
+collabtm_SOURCES = env.hh ratings.hh ratings.cc matrix.hh main.cc log.cc log.hh collabtm.cc collabtm.hh gammapoisson.hh
 roc_SOURCES = roceasy.c
 roc_LDADD = -lm
 all: all-am
@@ -234,9 +234,9 @@ uninstall-binPROGRAMS:
 
 clean-binPROGRAMS:
 	-test -z "$(bin_PROGRAMS)" || rm -f $(bin_PROGRAMS)
-gaprec$(EXEEXT): $(gaprec_OBJECTS) $(gaprec_DEPENDENCIES) $(EXTRA_gaprec_DEPENDENCIES) 
-	@rm -f gaprec$(EXEEXT)
-	$(CXXLINK) $(gaprec_OBJECTS) $(gaprec_LDADD) $(LIBS)
+collabtm$(EXEEXT): $(collabtm_OBJECTS) $(collabtm_DEPENDENCIES) $(EXTRA_collabtm_DEPENDENCIES) 
+	@rm -f collabtm$(EXEEXT)
+	$(CXXLINK) $(collabtm_OBJECTS) $(collabtm_LDADD) $(LIBS)
 roc$(EXEEXT): $(roc_OBJECTS) $(roc_DEPENDENCIES) $(EXTRA_roc_DEPENDENCIES) 
 	@rm -f roc$(EXEEXT)
 	$(LINK) $(roc_OBJECTS) $(roc_LDADD) $(LIBS)
@@ -247,7 +247,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gaprec.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/collabtm.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/log.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ratings.Po@am__quote@
