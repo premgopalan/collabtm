@@ -313,7 +313,7 @@ Ratings::read_mendeley_docs(string dir)
     vector<uint32_t> mids;
     uint32_t len = 0;
     if (fscanf(f, "%u\t", &len) < 0) {
-      printf("error: unexpected lines in file\n");
+      lerr("error: unexpected lines in file\n");
       fclose(f);
       printf("docseq = %d, docid = %d, maxwid = %d\n", docseq, docid, maxwid);
       fflush(stdout);
