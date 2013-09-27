@@ -67,17 +67,17 @@ Ratings::read_generic(FILE *f, CountMap *cmap)
 
     IDMap::iterator it = _user2seq.find(uid);
     if (it == _user2seq.end() && !add_user(uid)) {
-      printf("error: exceeded user limit %d, %d, %d\n",
-	     uid, mid, rating);
-      fflush(stdout);
+      //printf("error: exceeded user limit %d, %d, %d\n",
+      //uid, mid, rating);
+      //fflush(stdout);
       continue;
     }
     
     IDMap::iterator mt = _movie2seq.find(mid);
     if (mt == _movie2seq.end() && !add_movie(mid)) {
-      printf("error: exceeded movie limit %d, %d, %d\n",
-	     uid, mid, rating);
-      fflush(stdout);
+      //printf("error: exceeded movie limit %d, %d, %d\n",
+      //uid, mid, rating);
+      //fflush(stdout);
       continue;
     }
     
@@ -305,8 +305,9 @@ Ratings::read_mendeley_docs(string dir)
     fclose(f);
     exit(-1);
   }
-
-  uint32_t docid = 1;
+  
+  uint32_t maxwid = 0;
+  uint32_t docid = 1, docseq = 0;
   char b[128];
   while (!feof(f)) {
     vector<uint32_t> mids;
@@ -314,8 +315,23 @@ Ratings::read_mendeley_docs(string dir)
     if (fscanf(f, "%u\t", &len) < 0) {
       printf("error: unexpected lines in file\n");
       fclose(f);
-      exit(-1);
+      printf("docseq = %d, docid = %d, maxwid = %d\n", docseq, docid, maxwid);
+      fflush(stdout);
+      return 0;
     }
+
+
+    IDMap::iterator mt = _movie2seq.find(docid);
+    if (mt == _movie2seq.end()) {
+      printf("skipping docid %d\n", docid);
+      char buf[4096];
+      assert (fgets(buf, 4096, f) != NULL);
+      docid++;
+      continue;
+    }
+    docseq = mt->second;
+    printf("found docid %d docseq %d\n", docid, docseq);
+
     
     uint32_t wid = 1, wc = 0;
     for (uint32_t i = 0; i < len; ++i) {
@@ -332,20 +348,21 @@ Ratings::read_mendeley_docs(string dir)
 	  exit(-1);
 	}
       }
-      
-      if (!_docs2words[docid]) {
+      if (!_docs2words[docseq]) {
 	WordVec **wm = _docs2words.data();
-	wm[docid] = new WordVec;
+	wm[docseq] = new WordVec;
       } 
-      WordVec *wm = _docs2words[docid];
+      WordVec *wm = _docs2words[docseq];
       wm->push_back(WordCount(wid, wc));
+
+      if (wid > maxwid) {
+	maxwid = wid;
+      }
     }
     docid++;
   }
-  if (_nratings % 1000 == 0) {
-    printf("\r+ read %d documents", docid);
-    fflush(stdout);
-  }
+  printf("docseq = %d, docid = %d, maxwid = %d\n", docseq, docid, maxwid);
+  fflush(stdout);
   fclose(f);
   return 0;
 }
