@@ -123,9 +123,9 @@ CollabTM::batch_infer()
 	// then do theta.update_shape_next()
 
 	for (uint32_t k = 0; k < _k; ++k) 
-	  tauphi0[k] = phi[k] * taud[nd][k][0];
+	  tauphi[k] = phi[k] * taud[nd][k][0];
 
-	_theta.update_shape_next(nd, phi);
+	_theta.update_shape_next(nd, tauphi);
 	_x.update_shape_next(nu, phi);
 	_a.update_shape_next(nd, y); // since \sum_k \phi_k = 1
 
@@ -133,7 +133,10 @@ CollabTM::batch_infer()
 	if (y > 1)
 	  phi.scale(y);
 
-	_epsilon.update_shape_next(nd, phi);
+	for (uint32_t k = 0; k < _k; ++k) 
+	  tauphi[k] = phi[k] * taud[nd][k][1];
+
+	_epsilon.update_shape_next(nd, tauphi);
 	_x.update_shape_next(nu, phi);
       }
     }
