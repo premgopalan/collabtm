@@ -66,7 +66,7 @@ public:
       uint32_t max_iterations, bool load, string loc, 
       bool gen_hout,
       Env::Dataset d, bool batch, bool binary_data, 
-      bool bias, bool explore);
+      bool vb, bool explore, bool fixeda);
 
   ~Env() { fclose(_plogf); }
 
@@ -106,8 +106,9 @@ public:
   bool batch;
   Mode mode;
   bool binary_data;
-  bool bias;
+  bool vb;
   bool explore;
+  bool fixeda;
 
   template<class T> static void plog(string s, const T &v);
   static string file_str(string fname);
@@ -198,7 +199,7 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
 	 uint32_t maxitr, bool load, 
 	 string loc, bool gen_hout,
 	 Env::Dataset datasetv, bool batchv, 
-	 bool binary_datav, bool biasv, bool explore)
+	 bool binary_datav, bool vbv, bool explore, bool fixedav)
   : dataset(datasetv),
     ndocs(ndocs_v),
     nvocab(nvocab_v),
@@ -229,7 +230,8 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
     batch(batchv),
     mode(TRAINING),
     binary_data(binary_datav),
-    bias(biasv)
+    vb(vbv),
+    fixeda(fixedav)
 {
   ostringstream sa;
   sa << "nusers" << nusers << "-";
@@ -252,8 +254,12 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
   if (binary_data)
     sa << "-bin";
   
-  if (bias)
-    sa << "-bias";
+  if (vb)
+    sa << "-vb";
+
+
+  if (fixeda)
+    sa << "-fa";
 
   if (explore)
     sa << "-explore";

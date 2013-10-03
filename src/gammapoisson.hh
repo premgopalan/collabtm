@@ -200,7 +200,7 @@ GPMatrix::initialize()
   double **bd = _rcurr.data();
   for (uint32_t i = 0; i < _n; ++i)
     for (uint32_t k = 0; k < _k; ++k) {
-      ad[i][k] = _sprior + 0.01 * gsl_rng_uniform(*_r);
+      ad[i][k] = _sprior + 0.001 * gsl_rng_uniform(*_r);
       bd[i][k] = _rprior + 0.1 * gsl_rng_uniform(*_r);
     }
   double **vd1 = _Ev.data();
@@ -407,7 +407,7 @@ GPMatrixGR::initialize()
   double *bd = _rcurr.data();
   for (uint32_t i = 0; i < _n; ++i)
     for (uint32_t k = 0; k < _k; ++k)  {
-      ad[i][k] = _sprior + 0.01 * gsl_rng_uniform(*_r);
+      ad[i][k] = _sprior + 0.001 * gsl_rng_uniform(*_r);
       bd[k] = _rprior + 0.1 * gsl_rng_uniform(*_r);
     }
   double **vd1 = _Ev.data();
@@ -591,8 +591,8 @@ GPArray::initialize()
   double *ad = _scurr.data();
   double *bd = _rcurr.data();
   for (uint32_t i = 0; i < _n; ++i) {
-    ad[i] = _sprior + 0.01 * gsl_rng_uniform(*_r);
-    bd[i] = _rprior + 0.01 * gsl_rng_uniform(*_r);
+    ad[i] = _sprior + 0.001 * gsl_rng_uniform(*_r);
+    bd[i] = _rprior + 0.1 * gsl_rng_uniform(*_r);
   }
   
   double *vd1 = _Ev.data();

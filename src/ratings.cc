@@ -322,14 +322,14 @@ Ratings::read_mendeley_docs(string dir)
 
     IDMap::iterator mt = _movie2seq.find(docid);
     if (mt == _movie2seq.end()) {
-      lerr("skipping docid %d\n", docid);
+      debug("skipping docid %d\n", docid);
       char buf[4096];
       assert (fgets(buf, 4096, f) != NULL);
       docid++;
       continue;
     }
     docseq = mt->second;
-    lerr("found docid %d docseq %d\n", docid, docseq);
+    debug("found docid %d docseq %d\n", docid, docseq);
     
     uint32_t wid = 1, wc = 0;
     for (uint32_t i = 0; i < len; ++i) {

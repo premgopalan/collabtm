@@ -117,7 +117,7 @@ inline bool
 Ratings::add_user(uint32_t id)
 {
   if (_curr_user_seq >= _env.nusers) {
-    lerr("max users %d reached", _env.nusers);
+    debug("max users %d reached", _env.nusers);
     return false;
   }
   _user2seq[id] = _curr_user_seq;
@@ -136,7 +136,7 @@ inline bool
 Ratings::add_movie(uint32_t id)
 {
   if (_curr_movie_seq >= _env.ndocs) {
-    lerr("max movies %d reached", _env.ndocs);
+    debug("max movies %d reached", _env.ndocs);
     return false;
   }
   _movie2seq[id] = _curr_movie_seq;

@@ -67,9 +67,11 @@ main(int argc, char **argv)
   double a = 0.3, b = 0.3, c = 0.3, d = 0.3;
   Env::Dataset dataset = Env::MENDELEY;
   bool binary_data = false;
-  bool bias = false;
   bool explore = false;
+
   bool gen_ranking_for_users = false;
+  bool fixeda = false;
+  bool vb = false;
 
   uint32_t nusers, ndocs, nvocab;
 
@@ -144,12 +146,14 @@ main(int argc, char **argv)
       dataset = Env::ECHONEST;
     } else if (strcmp(argv[i], "-binary-data") == 0) {
       binary_data = true;
-    } else if (strcmp(argv[i], "-bias") == 0) {
-      bias = true;
     } else if (strcmp(argv[i], "-explore") == 0) {
       explore = true;
     } else if (strcmp(argv[i], "-gen-ranking") == 0) {
       gen_ranking_for_users = true;
+    } else if (strcmp(argv[i], "-fixeda") == 0) {
+      fixeda = true;
+    } else if (strcmp(argv[i], "-vb") == 0) {
+      vb = true;
     } else if (i > 0) {
       fprintf(stdout,  "error: unknown option %s\n", argv[i]);
       assert(0);
@@ -162,7 +166,7 @@ main(int argc, char **argv)
 	  strid, label, logl, rand_seed, max_iterations, 
 	  model_load, model_location, 
 	  gen_heldout, dataset,
-	  batch, binary_data, bias, explore);
+	  batch, binary_data, vb, explore, fixeda);
   env_global = &env;
   if (p) {
     postprocess(env);

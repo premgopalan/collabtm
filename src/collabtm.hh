@@ -18,10 +18,12 @@ private:
   void get_phi(GPBase<Matrix> &a, uint32_t ai, 
 	       GPBase<Matrix> &b, uint32_t bi, 
 	       Array &phi);
-  void get_xi(uint32_t user, uint32_t doc, Array &phi);
-  void get_tau(GPBase<Matrix> &a, GPBase<Matrix> &b,
-	       uint32_t nd, D3 &tau);
+  void get_xi(uint32_t nu, uint32_t nd, 
+	      Array &xi,
+	      Array &xi_a, 
+	      Array &x_b);
   void update_all_rates();
+  void update_all_rates_in_seq();
   void swap_all();
   void compute_all_expectations();
   void save_model();
@@ -43,9 +45,8 @@ private:
   GPMatrix _theta;
   GPMatrixGR _beta;
   GPMatrixGR _x;
-  GPMatrixGR _epsilon;
+  GPMatrix _epsilon;
   GPArray _a;
-  D3 _tau;
 
   uint32_t _start_time;
   gsl_rng *_r;
