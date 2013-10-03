@@ -117,6 +117,8 @@ CollabTM::batch_infer()
 	uint32_t nd = (*docs)[j];
 	yval_t y = _ratings.r(nu,nd);
 
+	assert (y > 0);
+
 	get_xi(nu, nd, xi, xi_a, xi_b);
 	if (y > 1) {
 	  xi_a.scale(y);
@@ -128,7 +130,7 @@ CollabTM::batch_infer()
 	_x.update_shape_next(nu, xi_a);
 	_x.update_shape_next(nu, xi_b);
 	if (!_env.fixeda)
-	  _a.update_shape_next(nd, y); // since \sum_k \phi_k = 1
+	  _a.update_shape_next(nd, y); // since \sum_k \xi_k = 1
       }
     }
 
