@@ -44,7 +44,7 @@ template<class T> inline  double
 GPBase<T>::compute_elbo_term() const
 {
   double s = compute_elbo_term_helper();
-  lerr("sum of %s elbo terms = %f\n", name().c_str(), s);
+  debug("sum of %s elbo terms = %f\n", name().c_str(), s);
   return s;
 }
 
@@ -256,9 +256,9 @@ GPMatrix::save_state(const IDMap &m) const
     fprintf(tf,"%d\t", id);
     for (uint32_t k = 0; k < _k; ++k) {
       if (k == _k - 1)
-	fprintf(tf,"%.5f\n", cd[i][k]);
+	fprintf(tf,"%.8f\n", cd[i][k]);
       else
-	fprintf(tf,"%.5f\t", cd[i][k]);
+	fprintf(tf,"%.8f\t", cd[i][k]);
     }
   }
   fclose(tf);
@@ -464,9 +464,9 @@ GPMatrixGR::save_state(const IDMap &m) const
     fprintf(tf,"%d\t", id);
     for (uint32_t k = 0; k < _k; ++k) {
       if (k == _k - 1)
-	fprintf(tf,"%.5f\n", cd[i][k]);
+	fprintf(tf,"%.8f\n", cd[i][k]);
       else
-	fprintf(tf,"%.5f\t", cd[i][k]);
+	fprintf(tf,"%.8f\t", cd[i][k]);
     }
   }
   fclose(tf);
@@ -641,7 +641,7 @@ GPArray::save_state(const IDMap &m) const
     
     fprintf(tf,"%d\t", i);
     fprintf(tf,"%d\t", id);
-    fprintf(tf,"%.5f\n", gd[i]);
+    fprintf(tf,"%.8f\n", gd[i]);
   }
   fclose(tf);
 }

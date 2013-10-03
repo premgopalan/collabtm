@@ -1007,7 +1007,7 @@ D2Array<T>::s() const
   for (uint32_t i = 0; i < m; ++i) {
     for (uint32_t j = 0; j < n; ++j) {
       double u = _data[i][j];
-      if (u < 1e-05 && u > .0)
+      if (u < 1e-08 && u > .0)
 	u = .0;
 
       if (i > 0 && j == 0)
@@ -1036,7 +1036,7 @@ D2Array<KV>::s() const
     for (uint32_t j = 0; j < n; ++j) {
       double v = _data[i][j].first;
       double u = _data[i][j].second;
-      if (u < 1e-05 && u > .0)
+      if (u < 1e-08 && u > .0)
 	u = .0;
 
       if (i > 0 && j == 0)

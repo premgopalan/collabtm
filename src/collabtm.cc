@@ -8,11 +8,11 @@ CollabTM::CollabTM(Env &env, Ratings &ratings)
     _k(env.k),
     _iter(0),
     _start_time(time(0)),
-    _theta("theta", 0.3, 0.3, _ndocs,_k,&_r),
-    _beta("beta", 0.3, 0.3, _nvocab,_k,&_r),
-    _x("x", 0.3, 0.3, _nusers,_k,&_r),
-    _epsilon("epsilon", 0.3, 0.3, _ndocs,_k,&_r),
-    _a("a", 0.3, 0.3, _ndocs,&_r)
+    _theta("theta", 0.3, (double)1000./_nusers, _ndocs,_k,&_r),
+    _beta("beta", 0.3, (double)1000./_ndocs, _nvocab,_k,&_r),
+    _x("x", 0.3, (double)1000./_ndocs, _nusers,_k,&_r),
+    _epsilon("epsilon", 0.3, (double)1000./_nusers, _ndocs,_k,&_r),
+    _a("a", 0.3, 0.3, _ndocs, &_r)
 {
   gsl_rng_env_setup();
   const gsl_rng_type *T = gsl_rng_default;
@@ -72,11 +72,11 @@ CollabTM::get_xi(uint32_t nu, uint32_t nd,
       xi[k] = elogx[nu][k] + elogepsilon[nd][k];
   }
   xi.lognormalize();
-  for (uint32_t k = 0; k < _k; ++k) 
+  for (uint32_t k = 0; k < 2*_k; ++k) 
     if (k < _k)
       xi_a[k] = xi[k];
     else
-      xi_b[k] = xi[k];
+      xi_b[k-_k] = xi[k];
 }
 
 
@@ -326,7 +326,7 @@ CollabTM::approx_log_likelihood()
     }
   }
 
-  lerr("E1: s = %f\n", s);
+  debug("E1: s = %f\n", s);
 
   for (uint32_t nu = 0; nu < _nusers; ++nu) {
     const vector<uint32_t> *docs = _ratings.get_movies(nu);
@@ -339,7 +339,7 @@ CollabTM::approx_log_likelihood()
       
       get_xi(nu, nd, xi, xi_a, xi_b);
 
-      lerr("xi = %s\n", xi.s().c_str());
+      debug("xi = %s\n", xi.s().c_str());
 
       double v = .0;
       for (uint32_t k = 0; k < 2*_k; ++k) {
@@ -351,13 +351,15 @@ CollabTM::approx_log_likelihood()
 	  r = !_env.fixeda ? (elogx[nu][k] + elogepsilon[nd][k] + eloga[nd]) :
 	    (elogx[nu][k] + elogtheta[nd][k]);
 	v += y * xi[k] * (r - log(xi[k]));
-	lerr("elogtheta = %f", elogtheta[nd][k]);
-	lerr("etheta = %f", etheta[nd][k]);
-	lerr("elogepsilon = %f", elogepsilon[nd][k]);
-	lerr("eepsilon = %f", eepsilon[nd][k]);
-	lerr("elogx = %f", elogx[nd][k]);
-	lerr("ex = %f", ex[nd][k]);
-	lerr("v = %f\n", v);
+
+	debug("elogtheta = %f", elogtheta[nd][k]);
+	debug("etheta = %f", etheta[nd][k]);
+	debug("elogepsilon = %f", elogepsilon[nd][k]);
+	debug("eepsilon = %f", eepsilon[nd][k]);
+	debug("elogx = %f", elogx[nd][k]);
+	debug("ex = %f", ex[nd][k]);
+	debug("v = %f\n", v);
+
       }
       s += v;
 
@@ -372,7 +374,7 @@ CollabTM::approx_log_likelihood()
     }
   }
 
-  lerr("E2: s = %f\n", s);
+  debug("E2: s = %f\n", s);
 
   s += _theta.compute_elbo_term();
   s += _beta.compute_elbo_term();
@@ -381,7 +383,7 @@ CollabTM::approx_log_likelihood()
   if (!_env.fixeda)
     s += _a.compute_elbo_term();
 
-  lerr("E3: s = %f\n", s);
+  debug("E3: s = %f\n", s);
 
   fprintf(_af, "%.5f\n", s);
   fflush(_af);
