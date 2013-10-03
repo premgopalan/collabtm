@@ -9,36 +9,51 @@
 template <class T>
 class GPBase {
 public:
-  GPBase() { }
+  GPBase(string name = ""): _name(name) { }
   virtual ~GPBase() { }
   virtual const T &expected_v() const = 0;
   virtual const T &expected_logv() const = 0;
   virtual uint32_t n() const = 0;
   virtual uint32_t k() const = 0;
+  virtual double compute_elbo_term_helper() const = 0;
+  virtual void save_state(const IDMap &m) const = 0;
   void  make_nonzero(double av, double bv,
 		     double &a, double &b) const;
+  string name() const { return _name; }
+  double compute_elbo_term() const;
+private:
+  string _name;
 };
 
 template<class T> inline  void
 GPBase<T>::make_nonzero(double av, double bv,
 			double &a, double &b) const
 {
+  assert (av >= 0 && bv >= 0);
   if (!(bv > .0)) 
-    b = 1e-30;
+    b = 1e-5;
   else
     b = bv;
   if (!(av > .0)) 
-    a = 1e-30;
+    a = 1e-5;
   else
     a = av;
 }
 
+template<class T> inline  double
+GPBase<T>::compute_elbo_term() const
+{
+  double s = compute_elbo_term_helper();
+  lerr("sum of %s elbo terms = %f\n", name().c_str(), s);
+  return s;
+}
 
 class GPMatrix : public GPBase<Matrix> {
 public:
-  GPMatrix(double a, double b,
+  GPMatrix(string name, double a, double b,
 	   uint32_t n, uint32_t k,
-	   gsl_rng **r):
+	   gsl_rng **r): 
+    GPBase(name),
     _n(n), _k(k),
     _sprior(a), // shape 
     _rprior(b), // rate
@@ -53,6 +68,8 @@ public:
 
   uint32_t n() const { return _n;}
   uint32_t k() const { return _k;}
+
+  void save() const;
   
   const Matrix &shape_curr() const         { return _scurr; }
   const Matrix &rate_curr() const          { return _rcurr; }
@@ -81,8 +98,9 @@ public:
   void sum_rows(Array &v);
   void scaled_sum_rows(Array &v, const Array &scale);
   void initialize();
+  void save_state(const IDMap &m) const;
 
-  double compute_elbo_term() const;
+  double compute_elbo_term_helper() const;
 
 private:
   uint32_t _n;
@@ -181,15 +199,15 @@ GPMatrix::initialize()
   double **ad = _scurr.data();
   double **bd = _rcurr.data();
   for (uint32_t i = 0; i < _n; ++i)
-    for (uint32_t k = 0; k < _k; ++k)
-      ad[i][k] = _sprior + 0.01 * gsl_rng_uniform(*_r);  
-
+    for (uint32_t k = 0; k < _k; ++k) {
+      ad[i][k] = _sprior + 0.01 * gsl_rng_uniform(*_r);
+      bd[i][k] = _rprior + 0.1 * gsl_rng_uniform(*_r);
+    }
   double **vd1 = _Ev.data();
   double **vd2 = _Elogv.data();
   
   for (uint32_t i = 0; i < _n; ++i)
     for (uint32_t k = 0; k < _k; ++k) {
-      bd[i][k] = _rprior + 0.1 * gsl_rng_uniform(*_r);
       assert(bd[i][k]);
       vd1[i][k] = ad[i][k] / bd[i][k];
       vd2[i][k] = gsl_sf_psi(ad[i][k]) - log(bd[i][k]);
@@ -197,7 +215,7 @@ GPMatrix::initialize()
 } 
 
 inline double
-GPMatrix::compute_elbo_term() const
+GPMatrix::compute_elbo_term_helper() const
 {
   const double **etheta = _Ev.data();
   const double **elogtheta = _Elogv.data();
@@ -220,11 +238,39 @@ GPMatrix::compute_elbo_term() const
   return s;
 }
 
+inline void
+GPMatrix::save_state(const IDMap &m) const
+{
+  string fname = string("/") + name() + ".tsv";
+  FILE * tf = fopen(Env::file_str(fname.c_str()).c_str(), "w");
+  const double **cd = expected_v().data();
+  uint32_t id = 0;
+  for (uint32_t i = 0; i < _n; ++i) {
+    IDMap::const_iterator idt = m.find(i);
+    if (idt != m.end()) 
+      id = idt->second;
+    else
+      id = i;
+
+    fprintf(tf,"%d\t", i);
+    fprintf(tf,"%d\t", id);
+    for (uint32_t k = 0; k < _k; ++k) {
+      if (k == _k - 1)
+	fprintf(tf,"%.5f\n", cd[i][k]);
+      else
+	fprintf(tf,"%.5f\t", cd[i][k]);
+    }
+  }
+  fclose(tf);
+}
+
 class GPMatrixGR : public GPBase<Matrix> { // global rates
 public:
-  GPMatrixGR(double a, double b,
+  GPMatrixGR(string name, 
+	     double a, double b,
 	     uint32_t n, uint32_t k,
 	     gsl_rng **r):
+    GPBase(name),
     _n(n), _k(k),
     _sprior(a), // shape 
     _rprior(b), // rate
@@ -267,7 +313,8 @@ public:
   void sum_rows(Array &v);
   void scaled_sum_rows(Array &v, const Array &scale);
   void initialize();
-  double compute_elbo_term() const;
+  double compute_elbo_term_helper() const;
+  void save_state(const IDMap &m) const;
 
 private:
   uint32_t _n;
@@ -325,6 +372,11 @@ GPMatrixGR::compute_expectations()
       vd1[i][j] = a / b;
       vd2[i][j] = gsl_sf_psi(a) - log(b);
     }
+  debug("name = %s, scurr = %s, rcurr = %s, Ev = %s\n",
+	name().c_str(),
+	_scurr.s().c_str(),
+	_rcurr.s().c_str(),
+	_Ev.s().c_str());
 }
 
 inline void
@@ -354,15 +406,15 @@ GPMatrixGR::initialize()
   double **ad = _scurr.data();
   double *bd = _rcurr.data();
   for (uint32_t i = 0; i < _n; ++i)
-    for (uint32_t k = 0; k < _k; ++k) 
+    for (uint32_t k = 0; k < _k; ++k)  {
       ad[i][k] = _sprior + 0.01 * gsl_rng_uniform(*_r);
-
+      bd[k] = _rprior + 0.1 * gsl_rng_uniform(*_r);
+    }
   double **vd1 = _Ev.data();
   double **vd2 = _Elogv.data();
   
   for (uint32_t i = 0; i < _n; ++i)
     for (uint32_t j = 0; j < _k; ++j) {
-      bd[j] = _rprior + 0.1 * gsl_rng_uniform(*_r);
       assert(bd[j]);
       vd1[i][j] = ad[i][j] / bd[j];
       vd2[i][j] = gsl_sf_psi(ad[i][j]) - log(bd[j]);
@@ -370,7 +422,7 @@ GPMatrixGR::initialize()
 } 
 
 inline double
-GPMatrixGR::compute_elbo_term() const
+GPMatrixGR::compute_elbo_term_helper() const
 {
   const double **etheta = _Ev.const_data();
   const double **elogtheta = _Elogv.const_data();
@@ -382,6 +434,7 @@ GPMatrixGR::compute_elbo_term() const
     for (uint32_t k = 0; k < _k; ++k) {
       s += _sprior * log(_rprior) + (_sprior - 1) * elogtheta[n][k];
       s -= _rprior * etheta[n][k] + gsl_sf_lngamma(_sprior);
+      debug("ehelper: %f:%f:%f log:%f\n", s, etheta[n][k], gsl_sf_lngamma(_sprior), elogtheta[n][k]);
     }
     double a = .0, b = .0;
     for (uint32_t k = 0; k < _k; ++k) {
@@ -393,10 +446,39 @@ GPMatrixGR::compute_elbo_term() const
   return s;
 }
 
+inline void
+GPMatrixGR::save_state(const IDMap &m) const
+{
+  string fname = string("/") + name() + ".tsv";
+  FILE * tf = fopen(Env::file_str(fname.c_str()).c_str(), "w");
+  const double **cd = expected_v().data();
+  uint32_t id = 0;
+  for (uint32_t i = 0; i < _n; ++i) {
+    IDMap::const_iterator idt = m.find(i);
+    if (idt != m.end()) 
+      id = idt->second;
+    else
+      id = i;
+
+    fprintf(tf,"%d\t", i);
+    fprintf(tf,"%d\t", id);
+    for (uint32_t k = 0; k < _k; ++k) {
+      if (k == _k - 1)
+	fprintf(tf,"%.5f\n", cd[i][k]);
+      else
+	fprintf(tf,"%.5f\t", cd[i][k]);
+    }
+  }
+  fclose(tf);
+}
+
+
 class GPArray : public GPBase<Array> {
 public:
-  GPArray(double a, double b,
+  GPArray(string name, 
+	  double a, double b,
 	  uint32_t n, gsl_rng **r): 
+    GPBase(name),
     _n(n),
     _sprior(a), // shape 
     _rprior(b), // rate
@@ -436,7 +518,8 @@ public:
   void compute_expectations();
   void initialize();
 
-  double compute_elbo_term() const;
+  double compute_elbo_term_helper() const;
+  void save_state(const IDMap &m) const;
 
 private:
   uint32_t _n;
@@ -506,8 +589,11 @@ inline void
 GPArray::initialize()
 {
   double *ad = _scurr.data();
-  for (uint32_t i = 0; i < _n; ++i)
+  double *bd = _rcurr.data();
+  for (uint32_t i = 0; i < _n; ++i) {
     ad[i] = _sprior + 0.01 * gsl_rng_uniform(*_r);
+    bd[i] = _rprior + 0.01 * gsl_rng_uniform(*_r);
+  }
   
   double *vd1 = _Ev.data();
   double *vd2 = _Elogv.data();
@@ -520,7 +606,7 @@ GPArray::initialize()
 } 
 
 inline double
-GPArray::compute_elbo_term() const
+GPArray::compute_elbo_term_helper() const
 {
   const double *etheta = _Ev.const_data();
   const double *elogtheta = _Elogv.const_data();
@@ -533,11 +619,31 @@ GPArray::compute_elbo_term() const
     make_nonzero(ad[n], bd[n], a, b);
     s += _sprior * log(_rprior) + (_sprior - 1) * elogtheta[n];
     s -= _rprior * etheta[n] + gsl_sf_lngamma(_sprior);
-
     s -= a * log(b) + (a - 1) * elogtheta[n];
     s += b * etheta[n] + gsl_sf_lngamma(a);
   }
   return s;
+}
+
+inline void
+GPArray::save_state(const IDMap &m) const
+{
+  string fname = string("/") + name() + ".tsv";
+  FILE * tf = fopen(Env::file_str(fname.c_str()).c_str(), "w");
+  const double *gd = expected_v().data();
+  uint32_t id = 0;
+  for (uint32_t i = 0; i < _n; ++i) {
+    IDMap::const_iterator idt = m.find(i);
+    if (idt != m.end()) 
+      id = idt->second;
+    else
+      id = i;
+    
+    fprintf(tf,"%d\t", i);
+    fprintf(tf,"%d\t", id);
+    fprintf(tf,"%.5f\n", gd[i]);
+  }
+  fclose(tf);
 }
 
 #endif

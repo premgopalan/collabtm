@@ -163,8 +163,6 @@ top_srcdir = @top_srcdir@
 collabtm_SOURCES = env.hh ratings.hh ratings.cc matrix.hh main.cc log.cc log.hh collabtm.cc collabtm.hh gammapoisson.hh
 roc_SOURCES = roceasy.c
 roc_LDADD = -lm
-@DEBUG_TRUE@AM_CFLAGS = -g  -O0
-@DEBUG_TRUE@AM_CXXFLAGS = -g -O0
 all: all-am
 
 .SUFFIXES:
@@ -486,6 +484,10 @@ uninstall-am: uninstall-binPROGRAMS
 	mostlyclean-generic pdf pdf-am ps ps-am tags uninstall \
 	uninstall-am uninstall-binPROGRAMS
 
+#if DEBUG
+#AM_CFLAGS = -g  -O0
+#AM_CXXFLAGS = -g -O0
+#endif
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

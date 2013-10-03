@@ -18,11 +18,17 @@ private:
   void get_phi(GPBase<Matrix> &a, uint32_t ai, 
 	       GPBase<Matrix> &b, uint32_t bi, 
 	       Array &phi);
+  void get_xi(uint32_t user, uint32_t doc, Array &phi);
   void get_tau(GPBase<Matrix> &a, GPBase<Matrix> &b,
 	       uint32_t nd, D3 &tau);
   void update_all_rates();
   void swap_all();
   void compute_all_expectations();
+  void save_model();
+  
+  void save_user_state(string s, const Matrix &mat);
+  void save_item_state(string s, const Matrix &mat);
+  void save_state(string s, const Array &mat);
 
   Env &_env;
   Ratings &_ratings;

@@ -8,11 +8,11 @@ CollabTM::CollabTM(Env &env, Ratings &ratings)
     _k(env.k),
     _iter(0),
     _start_time(time(0)),
-    _theta(0.3, 0.3, _ndocs,_k,&_r),
-    _beta(0.3, 0.3, _nvocab,_k,&_r),
-    _x(0.3, 0.3, _nusers,_k,&_r),
-    _epsilon(0.3, 0.3, _ndocs,_k,&_r),
-    _a(0.3, 0.3, _ndocs,&_r),
+    _theta("theta", 0.3, 0.3, _ndocs,_k,&_r),
+    _beta("beta", 0.3, 0.3, _nvocab,_k,&_r),
+    _x("x", 0.3, 0.3, _nusers,_k,&_r),
+    _epsilon("epsilon", 0.3, 0.3, _ndocs,_k,&_r),
+    _a("a", 0.3, 0.3, _ndocs,&_r),
     _tau(_ndocs, _k, 2)
 {
   gsl_rng_env_setup();
@@ -45,13 +45,30 @@ CollabTM::get_phi(GPBase<Matrix> &a, uint32_t ai,
 {
   assert (phi.size() == a.k() &&
 	  phi.size() == b.k());
-  debug("ai = %d, bi = %d\n", ai, bi);
   assert (ai < a.n() && bi < b.n());
-  const double  **eloga = _theta.expected_v().const_data();
-  const double  **elogb = _beta.expected_logv().const_data();
+  const double  **eloga = a.expected_v().const_data();
+  const double  **elogb = b.expected_logv().const_data();
   phi.zero();
   for (uint32_t k = 0; k < _k; ++k)
     phi[k] = eloga[ai][k] + elogb[bi][k];
+  phi.lognormalize();
+}
+
+
+void
+CollabTM::get_xi(uint32_t user, uint32_t doc, Array &phi)
+{
+  const double  **elogx = _x.expected_v().const_data();
+  const double  **elogtheta = _theta.expected_logv().const_data();
+  const double  **elogepsilon = _epsilon.expected_logv().const_data();
+  double ***taud = _tau.data();
+  phi.zero();
+  for (uint32_t k = 0; k < _k; ++k) {
+    phi[k] = elogx[user][k] + taud[doc][k][0] * elogtheta[doc][k] + \
+      taud[doc][k][1] * elogepsilon[user][k];
+    phi[k] -= taud[doc][k][0] * log (taud[doc][k][0]) + \
+      taud[doc][k][1] * log (taud[doc][k][1]);
+  }
   phi.lognormalize();
 }
 
@@ -64,7 +81,7 @@ CollabTM::get_tau(GPBase<Matrix> &a, GPBase<Matrix> &b,
 	  tau.m() == b.n());
   assert (nd < a.n());
   const double  **eloga = _theta.expected_v().const_data();
-  const double  **elogb = _beta.expected_logv().const_data();
+  const double  **elogb = _epsilon.expected_logv().const_data();
   double ***taud = _tau.data();
   Array p(2);
   for (uint32_t k = 0; k < _k; ++k) {
@@ -80,9 +97,12 @@ void
 CollabTM::batch_infer()
 {
   initialize();
+  compute_all_expectations();
+  approx_log_likelihood();
 
   Array phi(_k);
-  Array tauphi(_k);
+  Array xi(_k);
+  Array tauphi0(_k), tauphi1(_k);
   double ***taud = _tau.data();
 
   while(1) {
@@ -113,44 +133,37 @@ CollabTM::batch_infer()
 	uint32_t nd = (*docs)[j];
 	yval_t y = _ratings.r(nu,nd);
 
-	get_phi(_x, nu, _theta, nd, phi);
+	get_xi(nu, nd, xi);
 	if (y > 1)
-	  phi.scale(y);
+	  xi.scale(y);
 
 	// todo: optimize
-	// rather than multiply each time, add all the phi
+	// rather than multiply each time, add all the xi
 	// and scale by tau at the end;
 	// then do theta.update_shape_next()
 
-	for (uint32_t k = 0; k < _k; ++k) 
-	  tauphi[k] = phi[k] * taud[nd][k][0];
+	for (uint32_t k = 0; k < _k; ++k)  {
+	  tauphi0[k] = xi[k] * taud[nd][k][0];
+	  tauphi1[k] = xi[k] * taud[nd][k][1];
+	}
 
-	_theta.update_shape_next(nd, tauphi);
-	_x.update_shape_next(nu, phi);
+	_theta.update_shape_next(nd, tauphi0);
+	_epsilon.update_shape_next(nd, tauphi1);
+	_x.update_shape_next(nu, xi);
 	_a.update_shape_next(nd, y); // since \sum_k \phi_k = 1
-
-	get_phi(_x, nu, _epsilon, nd, phi);
-	if (y > 1)
-	  phi.scale(y);
-
-	for (uint32_t k = 0; k < _k; ++k) 
-	  tauphi[k] = phi[k] * taud[nd][k][1];
-
-	_epsilon.update_shape_next(nd, tauphi);
-	_x.update_shape_next(nu, phi);
       }
     }
 
     update_all_rates();
     swap_all();
     compute_all_expectations();
-
+    
     if (_iter % 10 == 0) {
       printf("Iteration %d\n", _iter);
       fflush(stdout);
       approx_log_likelihood();
+      save_model();
     }
-
     _iter++;
   }
 }
@@ -229,20 +242,24 @@ CollabTM::approx_log_likelihood()
   const double *eloga = _a.expected_logv().const_data();
 
   double s = .0;
-
+  double ***taud = _tau.data();
   Array phi(_k);
+  Array xi(_k);
   for (uint32_t nd = 0; nd < _ndocs; ++nd) {
+    get_tau(_theta, _epsilon, nd, _tau);
+
     const WordVec *w = _ratings.get_words(nd);
     for (uint32_t nw = 0; w && nw < w->size(); nw++) {
       WordCount p = (*w)[nw];
       uint32_t word = p.first;
       uint32_t count = p.second;
-
+      
       get_phi(_theta, nd, _beta, word, phi);
       
       double v = .0;
       for (uint32_t k = 0; k < _k; ++k) 
-	v += count * phi[k] * (elogtheta[nd][k] + elogbeta[word][k] - log(phi[k]));
+	v += count * phi[k] * (elogtheta[nd][k] +			\
+			       elogbeta[word][k] - log(phi[k]));
       s += v;
       
       for (uint32_t k = 0; k < _k; ++k)
@@ -250,34 +267,34 @@ CollabTM::approx_log_likelihood()
     }
   }
 
+  lerr("E1: s = %f\n", s);
+  
   for (uint32_t nu = 0; nu < _nusers; ++nu) {
-
+    
     const vector<uint32_t> *docs = _ratings.get_movies(nu);
     for (uint32_t j = 0; j < docs->size(); ++j) {
       uint32_t nd = (*docs)[j];
       yval_t y = _ratings.r(nu,nd);
-
-      get_phi(_x, nu, _theta, nd, phi);
-
+      
+      get_xi(nu, nd, xi);
+      
       double v = .0;
-      for (uint32_t k = 0; k < _k; ++k) 
-	v += y * phi[k] * (eloga[nd] + elogx[nu][k] + elogtheta[nd][k] - log(phi[k]));
+      for (uint32_t k = 0; k < _k; ++k) {
+	double t = taud[nd][k][0] * log (taud[nd][k][0])	\
+	  + taud[nd][k][1] * log (taud[nd][k][1]);
+	v += y * xi[k] * (eloga[nd] + elogx[nu][k]		\
+			  + taud[nd][k][0] * elogtheta[nd][k]	\
+			  + taud[nd][k][1] * elogepsilon[nu][k] \
+			  - t - log(xi[k]));
+      }
       s += v;
       
       for (uint32_t k = 0; k < _k; ++k)
-	s -= ex[nu][k] * etheta[nd][k] * ea[nd];
-
-      get_phi(_x, nu, _theta, nd, phi);
-
-      v = .0;
-      for (uint32_t k = 0; k < _k; ++k) 
-	v += y * phi[k] * (elogx[nu][k] + elogepsilon[nd][k] - log(phi[k]));
-      s += v;
-
-      for (uint32_t k = 0; k < _k; ++k)
-	s -= eepsilon[nd][k] * ex[nu][k];
+	s -= ex[nu][k] * (etheta[nd][k] + eepsilon[nd][k]) * ea[nd];
     }
   }
+
+  lerr("E2: s = %f\n", s);
 
   s += _theta.compute_elbo_term();
   s += _beta.compute_elbo_term();
@@ -285,6 +302,35 @@ CollabTM::approx_log_likelihood()
   s += _epsilon.compute_elbo_term();
   s += _a.compute_elbo_term();
 
+  lerr("E3: s = %f\n", s);
+
   fprintf(_af, "%.5f\n", s);
   fflush(_af);
 }
+
+void
+CollabTM::save_model()
+{
+  IDMap idmap; // null map
+  _x.save_state(_ratings.seq2user());
+  _theta.save_state(_ratings.seq2movie());
+  _epsilon.save_state(_ratings.seq2movie());
+  _beta.save_state(idmap);
+  _a.save_state(_ratings.seq2movie());
+}
+
+
+void
+CollabTM::save_state(string s, const Array &mat)
+{
+  FILE *tf = fopen(Env::file_str(s.c_str()).c_str(), "w");
+  const double *cd = mat.data();
+  for (uint32_t k = 0; k < mat.size(); ++k) {
+    if (k == _k - 1)
+      fprintf(tf,"%.5f\n", cd[k]);
+    else
+      fprintf(tf,"%.5f\t", cd[k]);
+  }
+  fclose(tf);
+}
+
