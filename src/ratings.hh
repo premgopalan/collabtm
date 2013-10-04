@@ -135,10 +135,12 @@ Ratings::add_user(uint32_t id)
 inline bool
 Ratings::add_movie(uint32_t id)
 {
+  /*
   if (_curr_movie_seq >= _env.ndocs) {
     debug("max movies %d reached", _env.ndocs);
     return false;
   }
+  */
   _movie2seq[id] = _curr_movie_seq;
   _seq2movie[_curr_movie_seq] = id;
 

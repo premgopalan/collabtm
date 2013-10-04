@@ -287,6 +287,7 @@ CollabTM::compute_all_expectations()
 void
 CollabTM::approx_log_likelihood()
 {
+  return ; // XXX
   const double ** etheta = _theta.expected_v().const_data();
   const double ** elogtheta = _theta.expected_logv().const_data();
   const double ** ebeta = _beta.expected_v().const_data();

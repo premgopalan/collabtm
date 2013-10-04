@@ -315,8 +315,10 @@ Ratings::read_mendeley_docs(string dir)
     if (fscanf(f, "%u\t", &len) < 0) {
       lerr("error: unexpected lines in file\n");
       fclose(f);
-      printf("docseq = %d, docid = %d, maxwid = %d\n", docseq, docid, maxwid);
+      lerr("docseq = %d, docid = %d, maxwid = %d\n", docseq, docid, maxwid);
       fflush(stdout);
+      _env.ndocs = _curr_movie_seq; // XXX
+      Env::plog("ndocs loaded (limited by nusers)", _env.ndocs);
       return 0;
     }
 
