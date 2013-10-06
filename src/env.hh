@@ -28,7 +28,6 @@ typedef D1Array<KV> KVArray;
 typedef std::map<uint32_t, yval_t> RatingMap;
 typedef std::map<uint32_t, uint16_t> WordMap;
 
-typedef std::map<uint32_t, uint32_t> IDMap;
 typedef std::map<uint32_t, uint32_t> FreqMap;
 typedef std::map<string, uint32_t> FreqStrMap;
 typedef std::map<string, uint32_t> StrMap;
@@ -66,7 +65,8 @@ public:
       uint32_t max_iterations, bool load, string loc, 
       bool gen_hout,
       Env::Dataset d, bool batch, bool binary_data, 
-      bool vb, bool explore, bool fixeda);
+      bool vb, bool explore, bool fixeda, bool vbinit,
+      uint32_t vbinit_iterations);
 
   ~Env() { fclose(_plogf); }
 
@@ -109,6 +109,8 @@ public:
   bool vb;
   bool explore;
   bool fixeda;
+  bool vbinit;
+  uint32_t vbinit_iter;
 
   template<class T> static void plog(string s, const T &v);
   static string file_str(string fname);
@@ -199,7 +201,9 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
 	 uint32_t maxitr, bool load, 
 	 string loc, bool gen_hout,
 	 Env::Dataset datasetv, bool batchv, 
-	 bool binary_datav, bool vbv, bool explore, bool fixedav)
+	 bool binary_datav, bool vbv, bool explore, 
+	 bool fixedav, bool vbinitv,
+	 uint32_t vbinit_iterations)
   : dataset(datasetv),
     ndocs(ndocs_v),
     nvocab(nvocab_v),
@@ -231,7 +235,9 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
     mode(TRAINING),
     binary_data(binary_datav),
     vb(vbv),
-    fixeda(fixedav)
+    fixeda(fixedav),
+    vbinit(vbinitv),
+    vbinit_iter(vbinit_iterations)
 {
   ostringstream sa;
   sa << "nusers" << nusers << "-";
@@ -261,6 +267,9 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
   if (fixeda)
     sa << "-fa";
 
+  if (vbinit)
+    sa << "-vbinit";
+
   if (explore)
     sa << "-explore";
 
@@ -286,6 +295,8 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
   plog("validation_ratio", validation_ratio);
   plog("seed", seed);
   plog("reportfreq", reportfreq);
+  plog("vbinit", vbinit);
+  plog("vbinit_iterations", vbinit_iterations);
   
   //string ndatfname = file_str("/network.dat");
   //unlink(ndatfname.c_str());

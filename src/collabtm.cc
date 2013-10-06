@@ -8,10 +8,19 @@ CollabTM::CollabTM(Env &env, Ratings &ratings)
     _k(env.k),
     _iter(0),
     _start_time(time(0)),
+    
+#ifdef INIT_TEST
     _theta("theta", 0.3, (double)1000./_nusers, _ndocs,_k,&_r),
     _beta("beta", 0.3, (double)1000./_ndocs, _nvocab,_k,&_r),
     _x("x", 0.3, (double)1000./_ndocs, _nusers,_k,&_r),
     _epsilon("epsilon", 0.3, (double)1000./_nusers, _ndocs,_k,&_r),
+    _a("a", 0.3, 0.3, _ndocs, &_r)
+#endif
+
+    _theta("theta", 0.3, 0.3, _ndocs,_k,&_r),
+    _beta("beta", 0.3, 0.3, _nvocab,_k,&_r),
+    _x("x", 0.3, 0.3, _nusers,_k,&_r),
+    _epsilon("epsilon", 0.3, 0.3, _ndocs,_k,&_r),
     _a("a", 0.3, 0.3, _ndocs, &_r)
 {
   gsl_rng_env_setup();
@@ -68,8 +77,10 @@ CollabTM::get_xi(uint32_t nu, uint32_t nd,
   for (uint32_t k = 0; k < 2*_k; ++k) {
     if (k < _k)
       xi[k] = elogx[nu][k] + elogtheta[nd][k];
-    else
-      xi[k] = elogx[nu][k] + elogepsilon[nd][k];
+    else {
+      uint32_t t = k - _k;
+      xi[k] = elogx[nu][t] + elogepsilon[nd][t];
+    }
   }
   xi.lognormalize();
   for (uint32_t k = 0; k < 2*_k; ++k) 
@@ -93,8 +104,9 @@ CollabTM::batch_infer()
   Array xi_b(_k);
 
   while(1) {
-
+    
     for (uint32_t nd = 0; nd < _ndocs; ++nd) {
+
       const WordVec *w = _ratings.get_words(nd);
       for (uint32_t nw = 0; w && nw < w->size(); nw++) {
 	WordCount p = (*w)[nw];
@@ -124,23 +136,25 @@ CollabTM::batch_infer()
 	  xi_a.scale(y);
 	  xi_b.scale(y);
 	}
-
+	
 	_theta.update_shape_next(nd, xi_a);
 	_epsilon.update_shape_next(nd, xi_b);
 	_x.update_shape_next(nu, xi_a);
 	_x.update_shape_next(nu, xi_b);
+
 	if (!_env.fixeda)
 	  _a.update_shape_next(nd, y); // since \sum_k \xi_k = 1
       }
     }
 
-    if (!_env.vb) {
+    if (_env.vb || (_env.vbinit && _iter < _env.vbinit_iter))
+      update_all_rates_in_seq();
+    else {
       update_all_rates();
       swap_all();
       compute_all_expectations();
-    } else
-      update_all_rates_in_seq();
-    
+    }
+
     if (_iter % 10 == 0) {
       lerr("Iteration %d\n", _iter);
       approx_log_likelihood();
@@ -215,7 +229,11 @@ CollabTM::update_all_rates_in_seq()
   Array betasum(_k);
   _beta.sum_rows(betasum);
   _theta.update_rate_next(betasum);
-  _theta.update_rate_next(xsum, _a.expected_v());
+  
+  if (_env.fixeda)
+    _theta.update_rate_next(xsum);
+  else
+    _theta.update_rate_next(xsum, _a.expected_v());
 
   _theta.swap();
   _theta.compute_expectations();
@@ -230,17 +248,30 @@ CollabTM::update_all_rates_in_seq()
 
   // update x rate
   Array scaledthetasum(_k);
-  _theta.scaled_sum_rows(scaledthetasum, _a.expected_v());
+  if (!_env.fixeda)
+    _theta.scaled_sum_rows(scaledthetasum, _a.expected_v());
+  else
+    _theta.sum_rows(scaledthetasum);
+
   Array scaledepsilonsum(_k);
-  _epsilon.scaled_sum_rows(scaledepsilonsum, _a.expected_v());
+  if (!_env.fixeda)
+    _epsilon.scaled_sum_rows(scaledepsilonsum, _a.expected_v());
+  else
+    _epsilon.sum_rows(scaledepsilonsum);
+
   _x.update_rate_next(scaledthetasum);
   _x.update_rate_next(scaledepsilonsum);
 
   _x.swap();
   _x.compute_expectations();
-
+  
+  //
   // update epsilon rate
-  _epsilon.update_rate_next(xsum, _a.expected_v());
+  //
+  if (_env.fixeda)
+    _epsilon.update_rate_next(xsum);
+  else
+    _epsilon.update_rate_next(xsum, _a.expected_v());
 
   _epsilon.swap();
   _epsilon.compute_expectations();
@@ -256,7 +287,6 @@ CollabTM::update_all_rates_in_seq()
       for (uint32_t k = 0; k < _k; ++k)
 	arate[nd] += xsum[k] * (theta_evd[nd][k] + epsilon_evd[nd][k]);
     _a.update_rate_next(arate);
-    
     _a.swap();
     _a.compute_expectations();
   }
@@ -287,7 +317,9 @@ CollabTM::compute_all_expectations()
 void
 CollabTM::approx_log_likelihood()
 {
-  return ; // XXX
+  if (_nusers > 10000 || _k > 10)
+    return;
+
   const double ** etheta = _theta.expected_v().const_data();
   const double ** elogtheta = _theta.expected_logv().const_data();
   const double ** ebeta = _beta.expected_v().const_data();
@@ -348,28 +380,25 @@ CollabTM::approx_log_likelihood()
 	if (k < _k)
 	  r = !_env.fixeda ? (elogx[nu][k] + elogtheta[nd][k] + eloga[nd]) : 
 	    (elogx[nu][k] + elogtheta[nd][k]);
-	else
-	  r = !_env.fixeda ? (elogx[nu][k] + elogepsilon[nd][k] + eloga[nd]) :
-	    (elogx[nu][k] + elogtheta[nd][k]);
+	else {
+	  uint32_t t = k - _k;
+	  r = !_env.fixeda ? (elogx[nu][t] + elogepsilon[nd][t] + eloga[nd]) :
+	    (elogx[nu][t] + elogepsilon[nd][t]);
+	}
 	v += y * xi[k] * (r - log(xi[k]));
-
-	debug("elogtheta = %f", elogtheta[nd][k]);
-	debug("etheta = %f", etheta[nd][k]);
-	debug("elogepsilon = %f", elogepsilon[nd][k]);
-	debug("eepsilon = %f", eepsilon[nd][k]);
-	debug("elogx = %f", elogx[nd][k]);
-	debug("ex = %f", ex[nd][k]);
-	debug("v = %f\n", v);
-
       }
       s += v;
 
       for (uint32_t k = 0; k < 2*_k; ++k) {
 	double r = .0;
 	if (k < _k)
-	  r = !_env.fixeda ? (ex[nu][k] * etheta[nd][k] * ea[nd]) : (ex[nu][k] * etheta[nd][k]);
-	else
-	  r = !_env.fixeda ? (ex[nu][k] * eepsilon[nd][k] * ea[nd]) : (ex[nu][k] * eepsilon[nd][k]);
+	  r = !_env.fixeda ? (ex[nu][k] * etheta[nd][k] * ea[nd]) : \
+	    (ex[nu][k] * etheta[nd][k]);
+	else {
+	  uint32_t t = k - _k;
+	  r = !_env.fixeda ? (ex[nu][t] * eepsilon[nd][t] * ea[nd]) : \
+	    (ex[nu][t] * eepsilon[nd][t]);
+	}
 	s -= r;
       }
     }

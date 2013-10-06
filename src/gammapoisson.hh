@@ -241,28 +241,14 @@ GPMatrix::compute_elbo_term_helper() const
 inline void
 GPMatrix::save_state(const IDMap &m) const
 {
-  string fname = string("/") + name() + ".tsv";
-  FILE * tf = fopen(Env::file_str(fname.c_str()).c_str(), "w");
-  const double **cd = expected_v().data();
-  uint32_t id = 0;
-  for (uint32_t i = 0; i < _n; ++i) {
-    IDMap::const_iterator idt = m.find(i);
-    if (idt != m.end()) 
-      id = idt->second;
-    else
-      id = i;
-
-    fprintf(tf,"%d\t", i);
-    fprintf(tf,"%d\t", id);
-    for (uint32_t k = 0; k < _k; ++k) {
-      if (k == _k - 1)
-	fprintf(tf,"%.8f\n", cd[i][k]);
-      else
-	fprintf(tf,"%.8f\t", cd[i][k]);
-    }
-  }
-  fclose(tf);
+  string expv_fname = string("/") + name() + ".tsv";
+  string shape_fname = string("/") + name() + "_shape.tsv";
+  string rate_fname = string("/") + name() + "_scale.tsv";
+  _scurr.save(Env::file_str(shape_fname), m);
+  _rcurr.save(Env::file_str(rate_fname), m);
+  _Ev.save(Env::file_str(expv_fname), m);
 }
+
 
 class GPMatrixGR : public GPBase<Matrix> { // global rates
 public:
@@ -449,29 +435,13 @@ GPMatrixGR::compute_elbo_term_helper() const
 inline void
 GPMatrixGR::save_state(const IDMap &m) const
 {
-  string fname = string("/") + name() + ".tsv";
-  FILE * tf = fopen(Env::file_str(fname.c_str()).c_str(), "w");
-  const double **cd = expected_v().data();
-  uint32_t id = 0;
-  for (uint32_t i = 0; i < _n; ++i) {
-    IDMap::const_iterator idt = m.find(i);
-    if (idt != m.end()) 
-      id = idt->second;
-    else
-      id = i;
-
-    fprintf(tf,"%d\t", i);
-    fprintf(tf,"%d\t", id);
-    for (uint32_t k = 0; k < _k; ++k) {
-      if (k == _k - 1)
-	fprintf(tf,"%.8f\n", cd[i][k]);
-      else
-	fprintf(tf,"%.8f\t", cd[i][k]);
-    }
-  }
-  fclose(tf);
+  string expv_fname = string("/") + name() + ".tsv";
+  string shape_fname = string("/") + name() + "_shape.tsv";
+  string rate_fname = string("/") + name() + "_scale.tsv";
+  _scurr.save(Env::file_str(shape_fname), m);
+  _rcurr.save(Env::file_str(rate_fname), m);
+  _Ev.save(Env::file_str(expv_fname), m);
 }
-
 
 class GPArray : public GPBase<Array> {
 public:
@@ -628,22 +598,12 @@ GPArray::compute_elbo_term_helper() const
 inline void
 GPArray::save_state(const IDMap &m) const
 {
-  string fname = string("/") + name() + ".tsv";
-  FILE * tf = fopen(Env::file_str(fname.c_str()).c_str(), "w");
-  const double *gd = expected_v().data();
-  uint32_t id = 0;
-  for (uint32_t i = 0; i < _n; ++i) {
-    IDMap::const_iterator idt = m.find(i);
-    if (idt != m.end()) 
-      id = idt->second;
-    else
-      id = i;
-    
-    fprintf(tf,"%d\t", i);
-    fprintf(tf,"%d\t", id);
-    fprintf(tf,"%.8f\n", gd[i]);
-  }
-  fclose(tf);
+  string expv_fname = string("/") + name() + ".tsv";
+  string shape_fname = string("/") + name() + "_shape.tsv";
+  string rate_fname = string("/") + name() + "_scale.tsv";
+  _scurr.save(Env::file_str(shape_fname), m);
+  _rcurr.save(Env::file_str(rate_fname), m);
+  _Ev.save(Env::file_str(expv_fname), m);
 }
 
 #endif

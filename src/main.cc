@@ -71,6 +71,8 @@ main(int argc, char **argv)
 
   bool gen_ranking_for_users = false;
   bool fixeda = false;
+  bool vbinit = false;
+  uint32_t vbinit_iterations = 10;
   bool vb = false;
 
   uint32_t nusers, ndocs, nvocab;
@@ -152,6 +154,9 @@ main(int argc, char **argv)
       gen_ranking_for_users = true;
     } else if (strcmp(argv[i], "-fixeda") == 0) {
       fixeda = true;
+    } else if (strcmp(argv[i], "-vbinit") == 0) {
+      vbinit = true;
+      vbinit_iterations = atoi(argv[++i]);
     } else if (strcmp(argv[i], "-vb") == 0) {
       vb = true;
     } else if (i > 0) {
@@ -166,7 +171,8 @@ main(int argc, char **argv)
 	  strid, label, logl, rand_seed, max_iterations, 
 	  model_load, model_location, 
 	  gen_heldout, dataset,
-	  batch, binary_data, vb, explore, fixeda);
+	  batch, binary_data, vb, explore, 
+	  fixeda, vbinit, vbinit_iterations);
   env_global = &env;
   if (p) {
     postprocess(env);

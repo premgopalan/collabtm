@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <limits.h>
+#include "log.hh"
 
 #define SQR(x) (x * x)
 
@@ -30,6 +31,7 @@ public:
   WordCount(): inherited() { }
   WordCount(uint32_t a, uint16_t b): inherited(a,b) { }
 };
+typedef std::map<uint32_t, uint32_t> IDMap;
 
 using namespace std;
 
@@ -95,8 +97,9 @@ public:
   T &operator[](uint32_t p);
   T operator[](uint32_t p) const;
 
-  //const T at(uint32_t p) const { return assert(p < _n); _data[p];}
+  void save(string name, const IDMap &m) const { }
 
+  //const T at(uint32_t p) const { return assert(p < _n); _data[p];}
   string s(uint32_t maxn = 0) const;
 
 private:
@@ -699,6 +702,28 @@ D1Array<T>::norm() const
   return v;
 }
 
+//  name = Env::file_str(string("/") + "theta.tsv").c_str();
+template<> inline void
+D1Array<double>::save(string name, const IDMap &m) const
+{
+  FILE * tf = fopen(name.c_str(), "w");
+  assert (tf);
+  const double *cd = const_data();
+  uint32_t id = 0;
+  for (uint32_t i = 0; i < _n; ++i) {
+    IDMap::const_iterator idt = m.find(i);
+    if (idt != m.end()) 
+      id = idt->second;
+    else
+      id = i;
+
+    fprintf(tf,"%d\t", i);
+    fprintf(tf,"%d\t", id);
+    fprintf(tf,"%.8f\n", cd[i]);
+  }
+  fclose(tf);
+}
+
 template <class T>
 class D2Array {
 public:
@@ -725,6 +750,7 @@ public:
   D2Array &operator*=(T);
   D2Array &operator+=(const D2Array<T> &);
 
+  void save(string name, const IDMap &m) const { }
   double abs_mean() const;
 
   // expensive
@@ -977,6 +1003,36 @@ D2Array<double>::lognormalize()
       _data[i][j] = ::exp(_data[i][j] - s);
 }
 
+
+//  name = Env::file_str(string("/") + "theta.tsv").c_str();
+template<> inline void
+D2Array<double>::save(string name, const IDMap &m) const
+{
+  FILE * tf = fopen(name.c_str(), "w");
+  if (!tf) 
+    lerr("cannot open file %s\n", name.c_str());
+  assert (tf);
+  const double **cd = const_data();
+  uint32_t id = 0;
+  for (uint32_t i = 0; i < _m; ++i) {
+    IDMap::const_iterator idt = m.find(i);
+    if (idt != m.end()) 
+      id = idt->second;
+    else
+      id = i;
+
+    fprintf(tf,"%d\t", i);
+    fprintf(tf,"%d\t", id);
+    for (uint32_t k = 0; k < _n; ++k) {
+      if (k == _n - 1)
+	fprintf(tf,"%.8f\n", cd[i][k]);
+      else
+	fprintf(tf,"%.8f\t", cd[i][k]);
+    }
+  }
+  fclose(tf);
+}
+
 template<class T> inline D2Array<T>&
 D2Array<T>::operator*=(T v)
 {
@@ -1120,6 +1176,7 @@ D2Array<T>::abs_mean() const
       s += fabs(_data[i][j]);
   return s / (_m * _n);
 }
+
 
 template <class T>
 class D3Array {
