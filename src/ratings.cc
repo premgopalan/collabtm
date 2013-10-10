@@ -49,7 +49,7 @@ Ratings::read_generic_train(string dir)
   fclose(f);
   Env::plog("training ratings", _nratings);
 
-  read_mendeley_docs(dir);
+  read_generic_docs(dir);
 }
 
 int
@@ -292,7 +292,7 @@ Ratings::read_mendeley(string dir)
 }
 
 int
-Ratings::read_mendeley_docs(string dir)
+Ratings::read_generic_docs(string dir)
 {
   char buf[1024];
   sprintf(buf, "%s/mult.dat", dir.c_str());

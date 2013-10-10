@@ -2,8 +2,7 @@
 #define GAMMAPOISSON_HH
 
 //
-// the variational posterior Gamma, the expectation of the Poisson under this
-// distribution
+// classes for matrices or arrays of Gamma variables
 //
 
 template <class T>
@@ -24,6 +23,7 @@ public:
 private:
   string _name;
 };
+typedef GPBase<Matrix> GPM;
 
 template<class T> inline  void
 GPBase<T>::make_nonzero(double av, double bv,
@@ -31,11 +31,12 @@ GPBase<T>::make_nonzero(double av, double bv,
 {
   assert (av >= 0 && bv >= 0);
   if (!(bv > .0)) 
-    b = 1e-5;
+    b = 1e-30;
   else
     b = bv;
+
   if (!(av > .0)) 
-    a = 1e-5;
+    a = 1e-30;
   else
     a = av;
 }
@@ -212,6 +213,7 @@ GPMatrix::initialize()
       vd1[i][k] = ad[i][k] / bd[i][k];
       vd2[i][k] = gsl_sf_psi(ad[i][k]) - log(bd[i][k]);
     }
+  set_to_prior();
 } 
 
 inline double
@@ -405,6 +407,7 @@ GPMatrixGR::initialize()
       vd1[i][j] = ad[i][j] / bd[j];
       vd2[i][j] = gsl_sf_psi(ad[i][j]) - log(bd[j]);
     }
+  set_to_prior();
 } 
 
 inline double
@@ -482,8 +485,9 @@ public:
 
   void set_to_prior();
   void update_shape_next(const Array &phi);
-  void update_shape_next(uint32_t n, uint32_t v);
+  void update_shape_next(uint32_t n, double v);
   void update_rate_next(const Array &v);
+  void update_rate_next(uint32_t n, double v);
   void swap();
   void compute_expectations();
   void initialize();
@@ -520,7 +524,7 @@ GPArray::update_shape_next(const Array &sphi)
 }
 
 inline void
-GPArray::update_shape_next(uint32_t n, uint32_t v)
+GPArray::update_shape_next(uint32_t n, double v)
 {
   _snext[n] += v;
 }
@@ -530,6 +534,12 @@ GPArray::update_rate_next(const Array &v)
 {
   assert (v.size() == _n);
   _rnext += v;
+}
+
+inline void
+GPArray::update_rate_next(uint32_t n, double v)
+{
+  _rnext[n] += v;
 }
 
 inline void
@@ -573,6 +583,7 @@ GPArray::initialize()
     vd1[i] = ad[i] / v;
     vd2[i] = gsl_sf_psi(ad[i]) - log(v);
   }
+  set_to_prior();
 } 
 
 inline double
@@ -605,5 +616,7 @@ GPArray::save_state(const IDMap &m) const
   _rcurr.save(Env::file_str(rate_fname), m);
   _Ev.save(Env::file_str(expv_fname), m);
 }
+
+
 
 #endif

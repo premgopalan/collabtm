@@ -74,6 +74,8 @@ main(int argc, char **argv)
   bool vbinit = false;
   uint32_t vbinit_iterations = 10;
   bool vb = false;
+  bool use_docs = false;
+  bool use_ratings = false;
 
   uint32_t nusers, ndocs, nvocab;
 
@@ -159,6 +161,12 @@ main(int argc, char **argv)
       vbinit_iterations = atoi(argv[++i]);
     } else if (strcmp(argv[i], "-vb") == 0) {
       vb = true;
+    } else if (strcmp(argv[i], "-doc-only") == 0) {
+      use_docs = true;
+      use_ratings = false;
+    } else if (strcmp(argv[i], "-ratings-only") == 0) {
+      use_docs = false;
+      use_ratings = true;
     } else if (i > 0) {
       fprintf(stdout,  "error: unknown option %s\n", argv[i]);
       assert(0);
@@ -172,7 +180,8 @@ main(int argc, char **argv)
 	  model_load, model_location, 
 	  gen_heldout, dataset,
 	  batch, binary_data, vb, explore, 
-	  fixeda, vbinit, vbinit_iterations);
+	  fixeda, vbinit, vbinit_iterations,
+	  use_docs, use_ratings);
   env_global = &env;
   if (p) {
     postprocess(env);

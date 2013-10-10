@@ -17,12 +17,12 @@ libraries may need to be specified:
 The binary 'gaprec' will be installed in /usr/local/bin unless a
 different prefix is provided to configure. (See INSTALL.)
 
-GAPREC: Gamma Poisson factorization based recommendation tool
---------------------------------------------------------------
+COLLABTM: Gamma Poisson factorization based recommendation tool for text+ratings data
+--------------------------------------------------------------------------------------
 
-**gaprec** [OPTIONS]
+**collabtm** [OPTIONS]
 
-   -dir <string>    path to dataset directory with 4 files:
+   -dir <string>    path to dataset directory with train.tsv and mult.dat
    		    train.tsv, test.tsv, validation.tsv, test_users.tsv
 		    (for examples, see example/movielens)
  

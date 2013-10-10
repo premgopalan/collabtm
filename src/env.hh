@@ -66,7 +66,8 @@ public:
       bool gen_hout,
       Env::Dataset d, bool batch, bool binary_data, 
       bool vb, bool explore, bool fixeda, bool vbinit,
-      uint32_t vbinit_iterations);
+      uint32_t vbinit_iterations, 
+      bool doc_only, bool ratings_only);
 
   ~Env() { fclose(_plogf); }
 
@@ -111,6 +112,8 @@ public:
   bool fixeda;
   bool vbinit;
   uint32_t vbinit_iter;
+  bool use_docs;
+  bool use_ratings;
 
   template<class T> static void plog(string s, const T &v);
   static string file_str(string fname);
@@ -203,7 +206,8 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
 	 Env::Dataset datasetv, bool batchv, 
 	 bool binary_datav, bool vbv, bool explore, 
 	 bool fixedav, bool vbinitv,
-	 uint32_t vbinit_iterations)
+	 uint32_t vbinit_iterations,
+	 bool use_docv, bool use_ratingsv)
   : dataset(datasetv),
     ndocs(ndocs_v),
     nvocab(nvocab_v),
@@ -237,7 +241,9 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
     vb(vbv),
     fixeda(fixedav),
     vbinit(vbinitv),
-    vbinit_iter(vbinit_iterations)
+    vbinit_iter(vbinit_iterations),
+    use_docs(use_docv),
+    use_ratings(use_ratingsv)
 {
   ostringstream sa;
   sa << "nusers" << nusers << "-";
@@ -273,6 +279,12 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
   if (explore)
     sa << "-explore";
 
+  if (use_docs && !use_ratings)
+    sa << "-doc";
+
+  if (!use_docs && use_ratings)
+    sa << "-ratings";
+
   prefix = sa.str();
   level = Logger::TEST;
 
@@ -297,6 +309,8 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
   plog("reportfreq", reportfreq);
   plog("vbinit", vbinit);
   plog("vbinit_iterations", vbinit_iterations);
+  plog("use_docs", use_docs);
+  plog("use_ratings", use_ratings);
   
   //string ndatfname = file_str("/network.dat");
   //unlink(ndatfname.c_str());

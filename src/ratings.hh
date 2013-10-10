@@ -72,7 +72,7 @@ private:
   int read_movielens_metadata(string dir);
   int read_netflix_metadata(string dir);
   int read_mendeley_metadata(string dir);
-  int read_mendeley_docs(string dir);
+  int read_generic_docs(string dir);
   
   string movies_by_user_s() const;
   bool add_movie(uint32_t id);
@@ -135,12 +135,10 @@ Ratings::add_user(uint32_t id)
 inline bool
 Ratings::add_movie(uint32_t id)
 {
-  /*
   if (_curr_movie_seq >= _env.ndocs) {
     debug("max movies %d reached", _env.ndocs);
     return false;
   }
-  */
   _movie2seq[id] = _curr_movie_seq;
   _seq2movie[_curr_movie_seq] = id;
 
