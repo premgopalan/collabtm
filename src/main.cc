@@ -74,8 +74,8 @@ main(int argc, char **argv)
   bool vbinit = false;
   uint32_t vbinit_iterations = 10;
   bool vb = false;
-  bool use_docs = false;
-  bool use_ratings = false;
+  bool use_docs = true;
+  bool use_ratings = true;
 
   uint32_t nusers, ndocs, nvocab;
 

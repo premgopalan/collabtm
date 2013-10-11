@@ -617,6 +617,4 @@ GPArray::save_state(const IDMap &m) const
   _Ev.save(Env::file_str(expv_fname), m);
 }
 
-
-
 #endif

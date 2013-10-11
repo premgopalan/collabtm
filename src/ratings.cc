@@ -22,8 +22,10 @@ Ratings::read(string s)
       read_mendeley(s);
     else if (_env.dataset == Env::ECHONEST)
       read_echonest(s);
-  } else 
+  } else  {
     read_generic_train(s);
+    read_generic_docs(s);
+  }
     
   char st[1024];
   sprintf(st, "read %d users, %d movies, %d ratings", 
@@ -48,8 +50,6 @@ Ratings::read_generic_train(string dir)
   read_generic(f, NULL);
   fclose(f);
   Env::plog("training ratings", _nratings);
-
-  read_generic_docs(dir);
 }
 
 int

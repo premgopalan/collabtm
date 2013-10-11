@@ -54,7 +54,7 @@ CollabTM::get_phi(GPBase<Matrix> &a, uint32_t ai,
   assert (phi.size() == a.k() &&
 	  phi.size() == b.k());
   assert (ai < a.n() && bi < b.n());
-  const double  **eloga = a.expected_v().const_data();
+  const double  **eloga = a.expected_logv().const_data();
   const double  **elogb = b.expected_logv().const_data();
   phi.zero();
   for (uint32_t k = 0; k < _k; ++k)
@@ -70,7 +70,7 @@ CollabTM::get_xi(uint32_t nu, uint32_t nd,
 		 Array &xi_b)
 {
   assert (xi.size() == 2 *_k && xi_a.size() == _k && xi_b.size() == _k);
-  const double  **elogx = _x.expected_v().const_data();
+  const double  **elogx = _x.expected_logv().const_data();
   const double  **elogtheta = _theta.expected_logv().const_data();
   const double  **elogepsilon = _epsilon.expected_logv().const_data();
   xi.zero();
@@ -105,8 +105,8 @@ CollabTM::batch_infer()
 
   while(1) {
     
-    if (_env.use_ratings) {
-
+    if (_env.use_docs) {
+      
       for (uint32_t nd = 0; nd < _ndocs; ++nd) {
 	
 	const WordVec *w = _ratings.get_words(nd);
@@ -125,7 +125,7 @@ CollabTM::batch_infer()
       }
     }
 
-    if (_env.use_docs) {
+    if (_env.use_ratings) {
       for (uint32_t nu = 0; nu < _nusers; ++nu) {
 	
 	const vector<uint32_t> *docs = _ratings.get_movies(nu);
@@ -134,21 +134,32 @@ CollabTM::batch_infer()
 	  yval_t y = _ratings.r(nu,nd);
 	  
 	  assert (y > 0);
+
+	  if (_env.use_docs) {
+	    get_xi(nu, nd, xi, xi_a, xi_b);
+	    if (y > 1) {
+	      xi_a.scale(y);
+	      xi_b.scale(y);
+	      xi.scale(y);
+	    }
+	    
+	    _theta.update_shape_next(nd, xi_a);
+	    _epsilon.update_shape_next(nd, xi_b);
+	    _x.update_shape_next(nu, xi_a);
+	    _x.update_shape_next(nu, xi_b);
+	    
+	    if (!_env.fixeda)
+	      _a.update_shape_next(nd, y); // since \sum_k \xi_k = 1
+	  } else { // ratings only
+
+	    get_phi(_x, nu, _epsilon, nd, phi);
+	    if (y > 1)
+	      phi.scale(y);
 	  
-	  get_xi(nu, nd, xi, xi_a, xi_b);
-	  if (y > 1) {
-	    xi_a.scale(y);
-	    xi_b.scale(y);
-	    xi.scale(y);
+	    _x.update_shape_next(nu, phi);
+	    _epsilon.update_shape_next(nd, phi);
+	    
 	  }
-	  
-	  _theta.update_shape_next(nd, xi_a);
-	  _epsilon.update_shape_next(nd, xi_b);
-	  _x.update_shape_next(nu, xi_a);
-	  _x.update_shape_next(nu, xi_b);
-	  
-	  if (!_env.fixeda)
-	    _a.update_shape_next(nd, y); // since \sum_k \xi_k = 1
 	}
       }
     }
@@ -236,72 +247,80 @@ CollabTM::update_all_rates()
 void // XXX: fix for 'fixeda' option
 CollabTM::update_all_rates_in_seq()
 {
-  // update theta rate
-  Array xsum(_k);
-  _x.sum_rows(xsum);
-  Array betasum(_k);
-  _beta.sum_rows(betasum);
-  _theta.update_rate_next(betasum);
+  if (_env.use_docs) {
+    // update theta rate
+    Array betasum(_k);
+    _beta.sum_rows(betasum);
+    _theta.update_rate_next(betasum);
+  }
   
-  if (_env.fixeda)
-    _theta.update_rate_next(xsum);
-  else
-    _theta.update_rate_next(xsum, _a.expected_v());
-
+  Array xsum(_k);
+  if (_env.use_ratings) {
+    _x.sum_rows(xsum);
+    if (_env.fixeda)
+      _theta.update_rate_next(xsum);
+    else
+      _theta.update_rate_next(xsum, _a.expected_v());
+  }
+  
   _theta.swap();
   _theta.compute_expectations();
   
-  // update beta rate
-  Array thetasum(_k);
-  _theta.sum_rows(thetasum);
-  _beta.update_rate_next(thetasum);
 
-  _beta.swap();
-  _beta.compute_expectations();
+  if (_env.use_docs) {
+    // update beta rate
+    Array thetasum(_k);
+    _theta.sum_rows(thetasum);
+    _beta.update_rate_next(thetasum);
 
-  // update x rate
-  Array scaledthetasum(_k);
-  if (!_env.fixeda)
-    _theta.scaled_sum_rows(scaledthetasum, _a.expected_v());
-  else
-    _theta.sum_rows(scaledthetasum);
+    _beta.swap();
+    _beta.compute_expectations();
+  }
 
-  Array scaledepsilonsum(_k);
-  if (!_env.fixeda)
-    _epsilon.scaled_sum_rows(scaledepsilonsum, _a.expected_v());
-  else
-    _epsilon.sum_rows(scaledepsilonsum);
 
-  _x.update_rate_next(scaledthetasum);
-  _x.update_rate_next(scaledepsilonsum);
-
-  _x.swap();
-  _x.compute_expectations();
-  
-  //
-  // update epsilon rate
-  //
-  if (_env.fixeda)
-    _epsilon.update_rate_next(xsum);
-  else
-    _epsilon.update_rate_next(xsum, _a.expected_v());
-
-  _epsilon.swap();
-  _epsilon.compute_expectations();
-
-  if (!_env.fixeda) {
-    // update 'a' rate
-    Array arate(_ndocs);
-    Matrix &theta_ev = _theta.expected_v();
-    const double **theta_evd = theta_ev.const_data();
-    Matrix &epsilon_ev = _epsilon.expected_v();
-    const double **epsilon_evd = epsilon_ev.const_data();
-    for (uint32_t nd = 0; nd < _ndocs; ++nd)
-      for (uint32_t k = 0; k < _k; ++k)
-	arate[nd] += xsum[k] * (theta_evd[nd][k] + epsilon_evd[nd][k]);
-    _a.update_rate_next(arate);
-    _a.swap();
-    _a.compute_expectations();
+  if (_env.use_ratings) {
+    // update x rate
+    Array scaledthetasum(_k);
+    if (!_env.fixeda)
+      _theta.scaled_sum_rows(scaledthetasum, _a.expected_v());
+    else
+      _theta.sum_rows(scaledthetasum);
+    
+    Array scaledepsilonsum(_k);
+    if (!_env.fixeda)
+      _epsilon.scaled_sum_rows(scaledepsilonsum, _a.expected_v());
+    else
+      _epsilon.sum_rows(scaledepsilonsum);
+    
+    _x.update_rate_next(scaledthetasum);
+    _x.update_rate_next(scaledepsilonsum);
+    
+    _x.swap();
+    _x.compute_expectations();
+    
+    // update epsilon rate
+    if (_env.fixeda)
+      _epsilon.update_rate_next(xsum);
+    else
+      _epsilon.update_rate_next(xsum, _a.expected_v());
+    
+    _epsilon.swap();
+    _epsilon.compute_expectations();
+    
+    if (!_env.fixeda) {
+      // update 'a' rate
+      Array arate(_ndocs);
+      Matrix &theta_ev = _theta.expected_v();
+      const double **theta_evd = theta_ev.const_data();
+      Matrix &epsilon_ev = _epsilon.expected_v();
+      const double **epsilon_evd = epsilon_ev.const_data();
+      for (uint32_t nd = 0; nd < _ndocs; ++nd)
+	for (uint32_t k = 0; k < _k; ++k)
+	  arate[nd] += xsum[k] * (theta_evd[nd][k] + epsilon_evd[nd][k]);
+      _a.update_rate_next(arate);
+      _a.swap();
+      _a.compute_expectations();
+    }
   }
 }
 
