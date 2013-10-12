@@ -1,4 +1,0 @@
-collabtm
-========
-
-collaborative topic modeling

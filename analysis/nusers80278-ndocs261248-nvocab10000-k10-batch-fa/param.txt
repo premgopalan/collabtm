@@ -1,0 +1,10 @@
+ndocs: 261248
+nusers: 80278
+nvocab: 10000
+k: 10
+test_ratio: 0.200000000
+validation_ratio: 0.010000000
+seed: 0.000000000
+reportfreq: 10
+training ratings: 4045547
+statistics: read 80278 users, 261248 movies, 4045547 ratings
