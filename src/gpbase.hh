@@ -1,10 +1,6 @@
 #ifndef GAMMAPOISSON_HH
 #define GAMMAPOISSON_HH
 
-//
-// classes for matrices or arrays of Gamma variables
-//
-
 template <class T>
 class GPBase {
 public:

@@ -3,7 +3,7 @@
 
 #include "env.hh"
 #include "ratings.hh"
-#include "gammapoisson.hh"
+#include "gpbase.hh"
 
 class CollabTM {
 public:

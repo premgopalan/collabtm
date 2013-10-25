@@ -1,5 +1,5 @@
 bin_PROGRAMS = collabtm roc
-collabtm_SOURCES = env.hh ratings.hh ratings.cc matrix.hh main.cc log.cc log.hh collabtm.cc collabtm.hh gammapoisson.hh
+collabtm_SOURCES = env.hh ratings.hh ratings.cc matrix.hh main.cc log.cc log.hh collabtm.cc collabtm.hh gpbase.hh
 roc_SOURCES = roceasy.c
 roc_LDADD = -lm
 #if DEBUG
