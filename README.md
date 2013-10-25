@@ -17,87 +17,28 @@ libraries may need to be specified:
 The binary 'gaprec' will be installed in /usr/local/bin unless a
 different prefix is provided to configure. (See INSTALL.)
 
-GAPREC: Gamma Poisson factorization based recommendation tool
---------------------------------------------------------------
+COLLABTM: Nonnegative Collaborative Topic Modeling tool
+--------------------------------------------------------
 
-**gaprec** [OPTIONS]
+**collabtm** [OPTIONS]
 
--dir <string>    path to dataset directory with 3 files: train.tsv, test.tsv, validation.tsv, test_users.tsv (for examples, see example/movielens)
+    -dir <string>    path to dataset directory with following files: train.tsv, test.tsv, validation.tsv, test_users.tsv (for examples, see example/movielens)
  
-    -m <int>	     number of items
-    -n <int>	     number of users
-    -k <int>	     number of factors
-   
-    -rfreq <int>     assess convergence and compute other stats; <int> number of iterations; default: 10
+    -mdocs <int>	     number of documents
+    -nuser <int>	     number of users
+    -nvocab <int>	     size of vocabulary
+    	    
+    -k <int>                 latent dimensionality
 
-    -a
-    -b		     set hyperparameters
-    -c		     default: a = b = c = d = 0.3
-    -d
+    -fixeda                  fix the document length correction factor ('a') to 1
 
-    -bias	     use user and item bias terms
+    -binary-data             treat observed ratings data as binary; if rating > 0 then rating is treated as 1
 
-    -binary-data     treat observed data as binary; if rating > 0 then rating is treated as 1
+EXAMPLE
+-------
 
-    -gen-ranking     generate ranking file to use in precision computation; see example		  
+Run two versions -- with the correction scalar 'a' inferred and one with 'a' fixed at a 1.  One of these fits might be better than the other. 
 
+/disk/scratch1/prem/collabtm/src/collabtm -dir /disk/scratch1/prem/collabtm/analysis/mendeley -nusers 80278 -ndocs 261248 -nvocab 10000 -k 100
 
-Example
---------
-
-Input:
-
-You need 4 files: train.tsv, test.tsv, validation.tsv and
-test_users.tsv The first 3 files are splits of the full ratings
-dataset. Column 0 is user id, column 1 is item id and column 2 is the
-rating. All 3 values are expected to be positive integers. The
-test_users.tsv file is a list of user ids that you want to generate
-the ranking file for (see step 2 below). Except for very large
-datasets, this set can be the full set of users ids.
-
-(1) ../src/gaprec -dir ../example/movielens -n 6040 -m 3900  -k 100 -rfreq 10
-
-This will write output in n6040-m3900-k100-batch:
-
-* param.txt: shows hyperparameter and other settings
-* precision.txt: computed mean precision at 10 and 100 on the test.tsv
-* validation.txt: the log likelihood on the validation.tsv ratings
-* theta.txt, beta.txt: the approx. expected posterior Poisson parameters
-* a,b,c,d.txt: the approx. expected posterior Gamma parameters
-* Ei, Eu.txt: the approx. expected bias parameters, if any (default none)
-* infer.log: monitor inference progress
-
-To generate the ranking file (ranking.tsv) for precision computation,
-run the following:
-
-(2) cd n6040-m3900-k100-batch;
-../../src/gaprec -dir ../../example/movielens -n 6040 -m 3900  -k 100 -rfreq 10 -gen-ranking
-
-This will rank the y == 0 in training and the test.tsv pairs in
-decreasing order of their scores, along with true ratings from
-test.tsv. This ranking is done only for the users in test_users.tsv.
-So to run step 2 you will need the test_users.tsv file.
-
-The output is now in n6040-m3900-k100-batch/ranking.tsv.
-
-Instead of (1) you could also run one of these:
-
-../src/gaprec -dir ../example/movielens -n 6040 -m 3900  -k 100 -rfreq 10 -bias
-../src/gaprec -dir ../example/movielens -n 6040 -m 3900  -k 100 -rfreq 10 -binary-data
-../src/gaprec -dir ../example/movielens -n 6040 -m 3900  -k 100 -rfreq 10 -binary-data -bias
-
-Bias terms
-----------
-
-To model user activity and item popularity, bias parameters are
-additionally inferred for each user and item. The new \theta and \beta
-are as follows:
-    		  
-    \theta_u' = [\theta_u, 1, g_u]
-    \beta_i' =  [\beta_i, h_i, 1]   
-
-
-Exploratory analysis
---------------------
-
-The code can do exploratory analysis using meta-data, e.g., movie titles. So you find a movies.tsv in the examples/movielens. But this code is still hard-wired to the specific dataset, and has not been cleaned up for general use.
+/disk/scratch1/prem/collabtm/src/collabtm -dir /disk/scratch1/prem/collabtm/analysis/mendeley -nusers 80278 -ndocs 261248 -nvocab 10000 -k 100 -fixeda 

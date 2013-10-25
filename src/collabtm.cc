@@ -1,5 +1,7 @@
 #include "collabtm.hh"
 
+//#define INIT_TEST 1
+
 CollabTM::CollabTM(Env &env, Ratings &ratings)
   : _env(env), _ratings(ratings),
     _nusers(env.nusers), 
@@ -39,11 +41,23 @@ CollabTM::CollabTM(Env &env, Ratings &ratings)
 void
 CollabTM::initialize()
 {
-  _theta.initialize();
-  _beta.initialize();
-  _x.initialize();
-  _epsilon.initialize();
-  _a.initialize();
+  if (_env.use_docs) {
+    _theta.initialize();
+    _beta.initialize();
+
+    _theta.initialize_exp();
+    _beta.initialize_exp();
+  }
+
+  if (_env.use_ratings) {
+    _x.initialize();
+    _epsilon.initialize();
+    _x.initialize_exp();
+    _epsilon.initialize_exp();
+
+    if (!_env.fixeda)
+      _a.initialize();
+  }
 }
 
 void
@@ -90,12 +104,10 @@ CollabTM::get_xi(uint32_t nu, uint32_t nd,
       xi_b[k-_k] = xi[k];
 }
 
-
 void
 CollabTM::batch_infer()
 {
   initialize();
-  compute_all_expectations();
   approx_log_likelihood();
 
   Array phi(_k);
@@ -104,7 +116,7 @@ CollabTM::batch_infer()
   Array xi_b(_k);
 
   while(1) {
-    
+
     if (_env.use_docs) {
       
       for (uint32_t nd = 0; nd < _ndocs; ++nd) {
@@ -124,7 +136,7 @@ CollabTM::batch_infer()
 	}
       }
     }
-
+    
     if (_env.use_ratings) {
       for (uint32_t nu = 0; nu < _nusers; ++nu) {
 	
@@ -134,7 +146,7 @@ CollabTM::batch_infer()
 	  yval_t y = _ratings.r(nu,nd);
 	  
 	  assert (y > 0);
-
+	  
 	  if (_env.use_docs) {
 	    get_xi(nu, nd, xi, xi_a, xi_b);
 	    if (y > 1) {
@@ -150,15 +162,15 @@ CollabTM::batch_infer()
 	    
 	    if (!_env.fixeda)
 	      _a.update_shape_next(nd, y); // since \sum_k \xi_k = 1
+
 	  } else { // ratings only
 
 	    get_phi(_x, nu, _epsilon, nd, phi);
 	    if (y > 1)
 	      phi.scale(y);
-	  
+	    
 	    _x.update_shape_next(nu, phi);
 	    _epsilon.update_shape_next(nd, phi);
-	    
 	  }
 	}
       }
@@ -177,6 +189,9 @@ CollabTM::batch_infer()
       approx_log_likelihood();
       save_model();
     }
+    if (_env.save_state_now)
+      exit(0);
+
     _iter++;
   }
 }
@@ -208,19 +223,20 @@ CollabTM::update_all_rates()
       _theta.update_rate_next(xsum);
 
     // update x rate
-    Array scaledthetasum(_k);
-    if (!_env.fixeda)
-      _theta.scaled_sum_rows(scaledthetasum, _a.expected_v());
-    else
-      _theta.sum_rows(scaledthetasum);
+    if (_env.use_docs) {
+      Array scaledthetasum(_k);
+      if (!_env.fixeda)
+	_theta.scaled_sum_rows(scaledthetasum, _a.expected_v());
+      else
+	_theta.sum_rows(scaledthetasum);
+      _x.update_rate_next(scaledthetasum);
+    }
 
     Array scaledepsilonsum(_k);
     if (!_env.fixeda)
       _epsilon.scaled_sum_rows(scaledepsilonsum, _a.expected_v());
     else
       _epsilon.sum_rows(scaledepsilonsum);
-    
-    _x.update_rate_next(scaledthetasum);
     _x.update_rate_next(scaledepsilonsum);
     
     // update epsilon rate
@@ -244,7 +260,7 @@ CollabTM::update_all_rates()
   }
 }
 
-void // XXX: fix for 'fixeda' option
+void
 CollabTM::update_all_rates_in_seq()
 {
   if (_env.use_docs) {
@@ -358,6 +374,7 @@ CollabTM::compute_all_expectations()
 void
 CollabTM::approx_log_likelihood()
 {
+  return; // XXX
   if (_nusers > 10000 || _k > 10)
     return;
 
@@ -465,6 +482,8 @@ CollabTM::save_model()
 {
   IDMap idmap; // null map
   if (_env.use_ratings) {
+    printf("saving ratings state\n");
+    fflush(stdout);
     _x.save_state(_ratings.seq2user());
     _epsilon.save_state(_ratings.seq2movie());
     if (!_env.fixeda) 

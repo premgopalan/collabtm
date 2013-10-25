@@ -307,7 +307,7 @@ Ratings::read_generic_docs(string dir)
   }
   
   uint32_t maxwid = 0;
-  uint32_t docid = 1, docseq = 0;
+  uint32_t docid = 0, docseq = 0;
   char b[128];
   while (!feof(f)) {
     vector<uint32_t> mids;
@@ -317,7 +317,7 @@ Ratings::read_generic_docs(string dir)
       fclose(f);
       lerr("docseq = %d, docid = %d, maxwid = %d\n", docseq, docid, maxwid);
       fflush(stdout);
-      _env.ndocs = _curr_movie_seq; // XXX
+      _env.ndocs = _curr_movie_seq;
       Env::plog("ndocs loaded (limited by nusers)", _env.ndocs);
       return 0;
     }

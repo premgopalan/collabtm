@@ -99,6 +99,7 @@ public:
   void sum_rows(Array &v);
   void scaled_sum_rows(Array &v, const Array &scale);
   void initialize();
+  void initialize_exp();
   void save_state(const IDMap &m) const;
 
   double compute_elbo_term_helper() const;
@@ -139,7 +140,7 @@ GPMatrix::update_rate_next(const Array &u, const Array &scale)
   Array t(_k);
   for (uint32_t i = 0; i < _n; ++i) {
     for (uint32_t k = 0; k < _k; ++k)
-      t[k] = u[k] *  scale[i];
+      t[k] = u[k] * scale[i];
     _rnext.add_slice(i, t);
   }
 }
@@ -200,18 +201,31 @@ GPMatrix::initialize()
   double **ad = _scurr.data();
   double **bd = _rcurr.data();
   for (uint32_t i = 0; i < _n; ++i)
-    for (uint32_t k = 0; k < _k; ++k) {
-      ad[i][k] = _sprior + 0.001 * gsl_rng_uniform(*_r);
-      bd[i][k] = _rprior + 0.1 * gsl_rng_uniform(*_r);
-    }
-  double **vd1 = _Ev.data();
-  double **vd2 = _Elogv.data();
+    for (uint32_t k = 0; k < _k; ++k)
+      ad[i][k] = _sprior + 0.01 * gsl_rng_uniform(*_r);
+
+  for (uint32_t k = 0; k < _k; ++k)
+    bd[0][k] = _rprior + 0.1 * gsl_rng_uniform(*_r);
   
   for (uint32_t i = 0; i < _n; ++i)
+    for (uint32_t k = 0; k < _k; ++k)
+      bd[i][k] = bd[0][k];
+}
+
+inline void
+GPMatrix::initialize_exp()
+{
+  double **ad = _scurr.data();
+  double **vd1 = _Ev.data();
+  double **vd2 = _Elogv.data();
+
+  Array b(_k);  
+  for (uint32_t i = 0; i < _n; ++i)
     for (uint32_t k = 0; k < _k; ++k) {
-      assert(bd[i][k]);
-      vd1[i][k] = ad[i][k] / bd[i][k];
-      vd2[i][k] = gsl_sf_psi(ad[i][k]) - log(bd[i][k]);
+      b[k] = _rprior + 0.1 * gsl_rng_uniform(*_r);
+      assert(b[k]);
+      vd1[i][k] = ad[i][k] / b[k];
+      vd2[i][k] = gsl_sf_psi(ad[i][k]) - log(b[k]);
     }
   set_to_prior();
 } 
@@ -301,6 +315,7 @@ public:
   void sum_rows(Array &v);
   void scaled_sum_rows(Array &v, const Array &scale);
   void initialize();
+  void initialize_exp();
   double compute_elbo_term_helper() const;
   void save_state(const IDMap &m) const;
 
@@ -391,13 +406,16 @@ GPMatrixGR::scaled_sum_rows(Array &v, const Array &scale)
 inline void
 GPMatrixGR::initialize()
 {
+  /*
   double **ad = _scurr.data();
   double *bd = _rcurr.data();
   for (uint32_t i = 0; i < _n; ++i)
-    for (uint32_t k = 0; k < _k; ++k)  {
-      ad[i][k] = _sprior + 0.001 * gsl_rng_uniform(*_r);
-      bd[k] = _rprior + 0.1 * gsl_rng_uniform(*_r);
-    }
+    for (uint32_t k = 0; k < _k; ++k) 
+      ad[i][k] = _sprior + 0.01 * gsl_rng_uniform(*_r);
+
+  for (uint32_t k = 0; k < _k; ++k)   
+    bd[k] = _rprior + 0.1 * gsl_rng_uniform(*_r);
+  
   double **vd1 = _Ev.data();
   double **vd2 = _Elogv.data();
   
@@ -408,6 +426,34 @@ GPMatrixGR::initialize()
       vd2[i][j] = gsl_sf_psi(ad[i][j]) - log(bd[j]);
     }
   set_to_prior();
+  */
+
+  double **ad = _scurr.data();
+  double *bd = _rcurr.data();
+  for (uint32_t i = 0; i < _n; ++i)
+    for (uint32_t k = 0; k < _k; ++k)
+      ad[i][k] = _sprior + 0.01 * gsl_rng_uniform(*_r);
+
+  for (uint32_t k = 0; k < _k; ++k)
+    bd[k] = _rprior + 0.1 * gsl_rng_uniform(*_r);
+}
+
+inline void
+GPMatrixGR::initialize_exp() 
+{
+  double **ad = _scurr.data();
+  double **vd1 = _Ev.data();
+  double **vd2 = _Elogv.data();
+
+  Array b(_k);  
+  for (uint32_t i = 0; i < _n; ++i)
+    for (uint32_t k = 0; k < _k; ++k) {
+      b[k] = _rprior + 0.1 * gsl_rng_uniform(*_r);
+      vd1[i][k] = ad[i][k] / b[k];
+      vd2[i][k] = gsl_sf_psi(ad[i][k]) - log(b[k]);
+    }
+  set_to_prior();
+
 } 
 
 inline double
@@ -571,7 +617,7 @@ GPArray::initialize()
   double *ad = _scurr.data();
   double *bd = _rcurr.data();
   for (uint32_t i = 0; i < _n; ++i) {
-    ad[i] = _sprior + 0.001 * gsl_rng_uniform(*_r);
+    ad[i] = _sprior + 0.01 * gsl_rng_uniform(*_r);
     bd[i] = _rprior + 0.1 * gsl_rng_uniform(*_r);
   }
   
