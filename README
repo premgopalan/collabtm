@@ -22,7 +22,7 @@ COLLABTM: Nonnegative Collaborative Topic Modeling tool
 
 **collabtm** [OPTIONS]
 
-    -dir <string>    path to dataset directory with following files: train.tsv, test.tsv, validation.tsv, test_users.tsv (for examples, see example/movielens)
+    -dir <string>            path to dataset directory with files described under INPUT below
  
     -mdocs <int>	     number of documents
     -nuser <int>	     number of users
@@ -34,6 +34,19 @@ COLLABTM: Nonnegative Collaborative Topic Modeling tool
 
     -binary-data             treat observed ratings data as binary; if rating > 0 then rating is treated as 1
 
+INPUT 
+-----
+
+We need the same files used by the basic factorization model.
+
+train.tsv, test.tsv, validation.tsv, test_users.tsv
+
+The new files additionally needed are mult.dat and vocab.dat.  (They are really text files.) This is the "document" portion of the data. Each line of mult.dat is a document and has the following format:
+
+     <number of words> <word-id0:count0> <word-id1:count1>....
+
+Each line of vocab.dat is a word. Note that both the word index and the document index starts at 0. So a word-id in vocab.dat can be 0 and the document id "rated" in train.tsv can be 0.
+
 EXAMPLE
 -------
 
@@ -42,3 +55,4 @@ Run two versions -- with the correction scalar 'a' inferred and one with 'a' fix
 /disk/scratch1/prem/collabtm/src/collabtm -dir /disk/scratch1/prem/collabtm/analysis/mendeley -nusers 80278 -ndocs 261248 -nvocab 10000 -k 100
 
 /disk/scratch1/prem/collabtm/src/collabtm -dir /disk/scratch1/prem/collabtm/analysis/mendeley -nusers 80278 -ndocs 261248 -nvocab 10000 -k 100 -fixeda 
+
