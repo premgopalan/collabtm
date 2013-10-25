@@ -25,7 +25,9 @@ COLLABTM: Nonnegative Collaborative Topic Modeling tool
     -dir <string>            path to dataset directory with files described under INPUT below
  
     -mdocs <int>	     number of documents
+
     -nuser <int>	     number of users
+
     -nvocab <int>	     size of vocabulary
     	    
     -k <int>                 latent dimensionality
@@ -33,6 +35,10 @@ COLLABTM: Nonnegative Collaborative Topic Modeling tool
     -fixeda                  fix the document length correction factor ('a') to 1
 
     -binary-data             treat observed ratings data as binary; if rating > 0 then rating is treated as 1
+
+    -doc-only                use document data only
+
+    -ratings-only            use ratings data only
 
 INPUT 
 -----
