@@ -1,5 +1,5 @@
-#ifndef GAMMAPOISSON_HH
-#define GAMMAPOISSON_HH
+#ifndef GPBASE_HH
+#define GPBASE_HH
 
 template <class T>
 class GPBase {
