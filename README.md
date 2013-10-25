@@ -14,7 +14,7 @@ libraries may need to be specified:
  ./configure LDFLAGS="-L/opt/local/lib" CPPFLAGS="-I/opt/local/include"
  make; make install
 
-The binary 'gaprec' will be installed in /usr/local/bin unless a
+The binary 'collabtm' will be installed in /usr/local/bin unless a
 different prefix is provided to configure. (See INSTALL.)
 
 COLLABTM: Nonnegative Collaborative Topic Modeling tool
