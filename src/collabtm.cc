@@ -42,8 +42,8 @@ void
 CollabTM::initialize()
 {
   if (_env.use_docs) {
-    _theta.initialize();
     _beta.initialize();
+    _theta.initialize();
 
     _theta.initialize_exp();
     _beta.initialize_exp();
@@ -55,8 +55,35 @@ CollabTM::initialize()
     _x.initialize_exp();
     _epsilon.initialize_exp();
 
-    if (!_env.fixeda)
+    if (!_env.fixeda) {
       _a.initialize();
+      _a.compute_expectations();
+    }
+  }
+}
+
+
+void
+CollabTM::initialize_perturb_betas()
+{
+  if (_env.use_docs) {
+    _beta.initialize();
+    _theta.set_to_prior_curr();
+
+    _theta.compute_expectations();
+    _beta.compute_expectations();
+  }
+
+  if (_env.use_ratings) {
+    _x.set_to_prior_curr();
+    _epsilon.set_to_prior_curr();
+    _x.compute_expectations();
+    _epsilon.compute_expectations();
+
+    if (!_env.fixeda) {
+      _a.set_to_prior_curr();
+      _a.compute_expectations();
+    }
   }
 }
 

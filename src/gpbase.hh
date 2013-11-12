@@ -86,6 +86,7 @@ public:
   const double rprior() const { return _rprior; }
 
   void set_to_prior();
+  void set_to_prior_curr();
   void update_shape_next(uint32_t n, const Array &sphi);
   void update_rate_next(const Array &u, const Array &scale);
   void update_rate_next(const Array &u);
@@ -121,6 +122,13 @@ GPMatrix::set_to_prior()
 {
   _snext.set_elements(_sprior);
   _rnext.set_elements(_rprior);
+}
+
+inline void
+GPMatrix::set_to_prior_curr()
+{
+  _scurr.set_elements(_sprior);
+  _rcurr.set_elements(_rprior);
 }
 
 inline void
@@ -302,6 +310,7 @@ public:
   const double rprior() const { return _rprior; }
 
   void set_to_prior();
+  void set_to_prior_curr();
   void update_shape_next(const Array &phi);
   void update_shape_next(uint32_t n, const Array &sphi);
 
@@ -335,6 +344,13 @@ GPMatrixGR::set_to_prior()
 {
   _snext.set_elements(_sprior);
   _rnext.set_elements(_rprior);
+}
+
+inline void
+GPMatrixGR::set_to_prior_curr()
+{
+  _scurr.set_elements(_sprior);
+  _rcurr.set_elements(_rprior);
 }
 
 inline void
@@ -526,6 +542,7 @@ public:
   uint32_t n() { return _n; }
 
   void set_to_prior();
+  void set_to_prior_curr();
   void update_shape_next(const Array &phi);
   void update_shape_next(uint32_t n, double v);
   void update_rate_next(const Array &v);
@@ -590,6 +607,13 @@ GPArray::swap()
   _scurr.swap(_snext);
   _rcurr.swap(_rnext);
   set_to_prior();
+}
+
+inline void
+GPArray::set_to_prior_curr()
+{
+  _scurr.set_elements(_sprior);
+  _rcurr.set_elements(_rprior);
 }
 
 inline void

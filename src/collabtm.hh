@@ -14,6 +14,7 @@ public:
 
 private:
   void initialize();
+  void initialize_perturb_betas();
   void approx_log_likelihood();
   void get_phi(GPBase<Matrix> &a, uint32_t ai, 
 	       GPBase<Matrix> &b, uint32_t bi, 
