@@ -134,7 +134,7 @@ CollabTM::get_xi(uint32_t nu, uint32_t nd,
 void
 CollabTM::batch_infer()
 {
-  initialize();
+  initialize_perturb_betas();
   approx_log_likelihood();
 
   Array phi(_k);
