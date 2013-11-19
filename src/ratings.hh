@@ -28,7 +28,8 @@ public:
     _curr_user_seq(0), 
     _curr_movie_seq(0),
     _nratings(0),
-    _likes(0) { }
+    _likes(0),
+    _movies_read(false) { }
   ~Ratings() { }
 
   int read(string s);
@@ -99,6 +100,7 @@ private:
   uint32_t _likes;
   StrMapInv _movie_names;
   StrMapInv _movie_types;
+  bool _movies_read;
 };
 
 inline uint32_t

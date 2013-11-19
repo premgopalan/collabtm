@@ -23,8 +23,12 @@ Ratings::read(string s)
     else if (_env.dataset == Env::ECHONEST)
       read_echonest(s);
   } else  {
-    read_generic_train(s);
+    // this ordering allows doc id == doc seq
+    // a necessary condition while loading LDA fits
+    // into collabtm's beta and theta
     read_generic_docs(s);
+    _movies_read = true;
+    read_generic_train(s);
   }
     
   char st[1024];
@@ -74,10 +78,12 @@ Ratings::read_generic(FILE *f, CountMap *cmap)
     }
     
     IDMap::iterator mt = _movie2seq.find(mid);
-    if (mt == _movie2seq.end() && !add_movie(mid)) {
-      //printf("error: exceeded movie limit %d, %d, %d\n",
-      //uid, mid, rating);
-      //fflush(stdout);
+    if (_movies_read)
+      assert (mt != _movie2seq.end());
+    else if (mt == _movie2seq.end() && !add_movie(mid)) {
+      printf("error: exceeded movie limit %d, %d, %d\n",
+      uid, mid, rating);
+      fflush(stdout);
       continue;
     }
     
@@ -323,13 +329,11 @@ Ratings::read_generic_docs(string dir)
     }
 
     IDMap::iterator mt = _movie2seq.find(docid);
-    if (mt == _movie2seq.end()) {
-      debug("skipping docid %d\n", docid);
-      char buf[4096];
-      assert (fgets(buf, 4096, f) != NULL);
-      docid++;
-      continue;
+    if (mt == _movie2seq.end() && !add_movie(docid)) {
+      lerr("error: exceeded movie limit %d\n", docid);
+      exit(-1); // the user must specify a greater number of documents
     }
+    mt = _movie2seq.find(docid);
     docseq = mt->second;
     debug("found docid %d docseq %d\n", docid, docseq);
     
@@ -361,7 +365,7 @@ Ratings::read_generic_docs(string dir)
     }
     docid++;
   }
-  printf("docseq = %d, docid = %d, maxwid = %d\n", docseq, docid, maxwid);
+  printf("docseq = %d, docid = %d, maxwid = %d\n", docseq, docid-1, maxwid);
   fflush(stdout);
   fclose(f);
   return 0;

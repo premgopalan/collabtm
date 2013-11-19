@@ -67,7 +67,9 @@ public:
       Env::Dataset d, bool batch, bool binary_data, 
       bool vb, bool explore, bool fixeda, bool vbinit,
       uint32_t vbinit_iterations, 
-      bool doc_only, bool ratings_only);
+      bool doc_only, bool ratings_only,
+      bool perturb_only_beta_shape,
+      bool lda);
 
   ~Env() { fclose(_plogf); }
 
@@ -114,6 +116,8 @@ public:
   uint32_t vbinit_iter;
   bool use_docs;
   bool use_ratings;
+  bool perturb_only_beta_shape;
+  bool lda;
 
   template<class T> static void plog(string s, const T &v);
   static string file_str(string fname);
@@ -207,7 +211,9 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
 	 bool binary_datav, bool vbv, bool explore, 
 	 bool fixedav, bool vbinitv,
 	 uint32_t vbinit_iterations,
-	 bool use_docv, bool use_ratingsv)
+	 bool use_docv, bool use_ratingsv,
+	 bool perturb_only_beta_shapev,
+	 bool ldav)
   : dataset(datasetv),
     ndocs(ndocs_v),
     nvocab(nvocab_v),
@@ -243,7 +249,9 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
     vbinit(vbinitv),
     vbinit_iter(vbinit_iterations),
     use_docs(use_docv),
-    use_ratings(use_ratingsv)
+    use_ratings(use_ratingsv),
+    perturb_only_beta_shape(perturb_only_beta_shapev),
+    lda(ldav)
 {
   ostringstream sa;
   sa << "nusers" << nusers << "-";
@@ -285,6 +293,12 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
   if (!use_docs && use_ratings)
     sa << "-ratings";
 
+  if (perturb_only_beta_shape)
+    sa << "-init0";
+  
+  if (lda)
+    sa << "-lda";
+
   prefix = sa.str();
   level = Logger::TEST;
 
@@ -311,6 +325,8 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
   plog("vbinit_iterations", vbinit_iterations);
   plog("use_docs", use_docs);
   plog("use_ratings", use_ratings);
+  plog("perturb_only_beta_shape", perturb_only_beta_shape);
+  plog("lda", lda);
   
   //string ndatfname = file_str("/network.dat");
   //unlink(ndatfname.c_str());

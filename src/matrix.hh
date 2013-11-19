@@ -12,6 +12,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <limits.h>
+#include <string.h>
+
 #include "log.hh"
 
 #define SQR(x) (x * x)
@@ -98,6 +100,7 @@ public:
   T operator[](uint32_t p) const;
 
   void save(string name, const IDMap &m) const { }
+  void load(string name) const { }
 
   //const T at(uint32_t p) const { return assert(p < _n); _data[p];}
   string s(uint32_t maxn = 0) const;
@@ -724,6 +727,65 @@ D1Array<double>::save(string name, const IDMap &m) const
   fclose(tf);
 }
 
+template<> inline void
+D1Array<uint32_t>::save(string name, const IDMap &m) const
+{
+  FILE * tf = fopen(name.c_str(), "w");
+  assert (tf);
+  const uint32_t *cd = const_data();
+  uint32_t id = 0;
+  for (uint32_t i = 0; i < _n; ++i) {
+    IDMap::const_iterator idt = m.find(i);
+    if (idt != m.end()) 
+      id = idt->second;
+    else
+      id = i;
+
+    fprintf(tf,"%d\t", i);
+    fprintf(tf,"%d\t", id);
+    fprintf(tf,"%d\n", cd[i]);
+  }
+  fclose(tf);
+}
+
+template<> inline void
+D1Array<double>::load(string name) const
+{
+  FILE *f = fopen(name.c_str(), "r");
+  if (!f)
+    lerr("cannot open file %s\n", name.c_str());
+  lerr("reading file %s", name.c_str());
+  assert(f);
+  double *md = _data;
+  uint32_t NCOLS = 3;
+
+  uint32_t n = 0;
+  uint32_t sz = 32 * NCOLS;
+  char *line = (char *)malloc(sz);
+  while (!feof(f)) {
+    if (fgets(line, sz, f) == NULL)
+      break;
+    uint32_t k = 0;
+    char *p = line;
+    do {
+      char *q = NULL;
+      double d = strtod(p, &q);
+      if (q == p) 
+	break;
+      p = q;
+      if (k >= NCOLS-1) // skip node id and seq
+	md[n] = d;
+      k++;
+    } while (p != NULL);
+    n++;
+    lerr("read %d entries\n", n);
+    memset(line, 0, sz);
+  }
+  assert (n <= _n);
+  fclose(f);
+  free(line);
+}
+
 template <class T>
 class D2Array {
 public:
@@ -750,7 +812,9 @@ public:
   D2Array &operator*=(T);
   D2Array &operator+=(const D2Array<T> &);
 
-  void save(string name, const IDMap &m) const { }
+  void save(string name, const IDMap &m) const { lerr("save not implemented"); }
+  void load(string name, uint32_t skipcols=2, 
+	    bool transpose=false) const { lerr("load not implemented"); }
   double abs_mean() const;
 
   // expensive
@@ -759,6 +823,7 @@ public:
 
   bool dim_equal(const D2Array<T> &a) const;
   T sum(uint32_t p) const;
+  T colsum(uint32_t p) const;
   
   void set_elements(T v);
   void set_elements(uint32_t m, const Array &v);
@@ -956,6 +1021,15 @@ D2Array<T>::sum(uint32_t p) const
   return s;
 }
 
+template<class T> inline T
+D2Array<T>::colsum(uint32_t p) const
+{
+  T s = .0;
+  for (uint32_t j = 0; j < _m; ++j)
+    s += _data[j][p];
+  return s;
+}
+
 template<class T> inline void
 D2Array<T>::add_slice(uint32_t p, const D1Array<T> &u)
 {
@@ -1032,6 +1106,62 @@ D2Array<double>::save(string name, const IDMap &m) const
   }
   fclose(tf);
 }
+
+template<> inline void
+D2Array<double>::load(string name, uint32_t skipcols, 
+		      bool transpose) const
+{
+  FILE *f = fopen(name.c_str(), "r");
+  if (!f)
+    lerr("cannot open file %s\n", name.c_str());
+  assert(f);
+
+  double **md = _data;
+  uint32_t m = 0;
+  int sz = transpose ? 32 *_m : 32*_n;
+  char *line = (char *)malloc(sz);
+  while (!feof(f)) {
+    if (fgets(line, sz, f) == NULL)
+      break;
+    uint32_t n = 0;
+    char *p = line;
+    do {
+      char *q = NULL;
+      double d = strtod(p, &q);
+      if (q == p) {
+	if (n < _n - 1) {
+	  fprintf(stderr, "error parsing %s file\n", name.c_str());
+	  assert(0);
+	}
+	break;
+      }
+      p = q;
+      if (transpose)  {
+	if (n >= skipcols) // skip node id and seq
+	  md[n-skipcols][m] = d;
+      } else {
+	if (n >= skipcols) // skip node id and seq
+	  md[m][n-skipcols] = d;
+      }
+      n++;
+    } while (p != NULL);
+    if (transpose) {
+      if (n != _m)
+	lerr("n = %d, _m = %d\n", n, _m);
+      assert (n == _m);
+    } else if (n != _n) {
+      lerr("n = %d, _n = %d\n", n, _n);
+      assert (n == _n);
+    }
+    m++;
+    memset(line, 0, sz);
+  }
+  lerr("read %d lines\n", m);
+  //assert (m == _m);
+  fclose(f);
+  free(line);
+}
+
 
 template<class T> inline D2Array<T>&
 D2Array<T>::operator*=(T v)

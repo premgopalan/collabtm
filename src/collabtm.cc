@@ -18,11 +18,11 @@ CollabTM::CollabTM(Env &env, Ratings &ratings)
     _epsilon("epsilon", 0.3, (double)1000./_nusers, _ndocs,_k,&_r),
     _a("a", 0.3, 0.3, _ndocs, &_r)
 #else
-    _theta("theta", 0.3, 0.3, _ndocs,_k,&_r),
-    _beta("beta", 0.3, 0.3, _nvocab,_k,&_r),
-    _x("x", 0.3, 0.3, _nusers,_k,&_r),
-    _epsilon("epsilon", 0.3, 0.3, _ndocs,_k,&_r),
-    _a("a", 0.3, 0.3, _ndocs, &_r)
+    _theta("theta", (double)1./_k, (double)1./_k, _ndocs,_k,&_r),
+    _beta("beta", (double)1./_k, (double)1./_k, _nvocab,_k,&_r),
+    _x("x", (double)1./_k, (double)1./_k, _nusers,_k,&_r),
+    _epsilon("epsilon", (double)1./_k, (double)1./_k, _ndocs,_k,&_r),
+    _a("a", (double)1./_k, (double)1./_k, _ndocs, &_r)
 #endif
 {
   gsl_rng_env_setup();
@@ -41,7 +41,13 @@ CollabTM::CollabTM(Env &env, Ratings &ratings)
 void
 CollabTM::initialize()
 {
-  if (_env.use_docs) {
+  if (_env.lda) {
+
+    _beta.load_from_lda(_env.datfname, 0.01, _k); // eek! fixme.
+    _theta.load_from_lda(_env.datfname, 0.1, _k);
+    lerr("loaded lda fits");
+
+  } else if (_env.use_docs) {
     _beta.initialize();
     _theta.initialize();
 
@@ -134,7 +140,11 @@ CollabTM::get_xi(uint32_t nu, uint32_t nd,
 void
 CollabTM::batch_infer()
 {
-  initialize_perturb_betas();
+  if (_env.perturb_only_beta_shape)
+    initialize_perturb_betas();
+  else
+    initialize();
+
   approx_log_likelihood();
 
   Array phi(_k);
@@ -144,7 +154,7 @@ CollabTM::batch_infer()
 
   while(1) {
 
-    if (_env.use_docs) {
+    if (_env.use_docs && !_env.lda) {
       
       for (uint32_t nd = 0; nd < _ndocs; ++nd) {
 	
@@ -181,8 +191,8 @@ CollabTM::batch_infer()
 	      xi_b.scale(y);
 	      xi.scale(y);
 	    }
-	    
-	    _theta.update_shape_next(nd, xi_a);
+	    if (!_env.lda)
+	      _theta.update_shape_next(nd, xi_a);
 	    _epsilon.update_shape_next(nd, xi_b);
 	    _x.update_shape_next(nu, xi_a);
 	    _x.update_shape_next(nu, xi_b);
@@ -227,7 +237,7 @@ CollabTM::batch_infer()
 void
 CollabTM::update_all_rates()
 {
-  if (_env.use_docs) {
+  if (_env.use_docs && !_env.lda) {
     // update theta rate
     Array betasum(_k);
     _beta.sum_rows(betasum);
@@ -244,11 +254,12 @@ CollabTM::update_all_rates()
     Array xsum(_k);
     _x.sum_rows(xsum);
     
-    if (!_env.fixeda)
-      _theta.update_rate_next(xsum, _a.expected_v());
-    else
-      _theta.update_rate_next(xsum);
-
+    if (!_env.lda)
+      if (!_env.fixeda)
+	_theta.update_rate_next(xsum, _a.expected_v());
+      else
+	_theta.update_rate_next(xsum);
+    
     // update x rate
     if (_env.use_docs) {
       Array scaledthetasum(_k);
@@ -290,7 +301,7 @@ CollabTM::update_all_rates()
 void
 CollabTM::update_all_rates_in_seq()
 {
-  if (_env.use_docs) {
+  if (_env.use_docs && !_env.lda) {
     // update theta rate
     Array betasum(_k);
     _beta.sum_rows(betasum);
@@ -300,17 +311,19 @@ CollabTM::update_all_rates_in_seq()
   Array xsum(_k);
   if (_env.use_ratings) {
     _x.sum_rows(xsum);
-    if (_env.fixeda)
-      _theta.update_rate_next(xsum);
-    else
-      _theta.update_rate_next(xsum, _a.expected_v());
+    if (!_env.lda)
+      if (_env.fixeda)
+	_theta.update_rate_next(xsum);
+      else
+	_theta.update_rate_next(xsum, _a.expected_v());
   }
   
-  _theta.swap();
-  _theta.compute_expectations();
-  
+  if (!_env.lda) {
+    _theta.swap();
+    _theta.compute_expectations();
+  }
 
-  if (_env.use_docs) {
+  if (_env.use_docs && !_env.lda) {
     // update beta rate
     Array thetasum(_k);
     _theta.sum_rows(thetasum);
@@ -319,8 +332,7 @@ CollabTM::update_all_rates_in_seq()
     _beta.swap();
     _beta.compute_expectations();
   }
-
-
+  
   if (_env.use_ratings) {
     // update x rate
     Array scaledthetasum(_k);
@@ -370,7 +382,7 @@ CollabTM::update_all_rates_in_seq()
 void
 CollabTM::swap_all()
 {
-  if (_env.use_docs) {
+  if (_env.use_docs && !_env.lda) {
     _theta.swap();
     _beta.swap();
   }
@@ -385,7 +397,7 @@ CollabTM::swap_all()
 void
 CollabTM::compute_all_expectations()
 {
-  if (_env.use_docs) { 
+  if (_env.use_docs && !_env.lda) { 
     _theta.compute_expectations();
     _beta.compute_expectations();
   }

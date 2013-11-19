@@ -76,8 +76,10 @@ main(int argc, char **argv)
   bool vb = false;
   bool use_docs = true;
   bool use_ratings = true;
+  bool perturb_only_beta_shape = false;
 
   uint32_t nusers, ndocs, nvocab;
+  bool lda = false;
 
   uint32_t i = 0;
   while (i <= argc - 1) {
@@ -167,6 +169,10 @@ main(int argc, char **argv)
     } else if (strcmp(argv[i], "-ratings-only") == 0) {
       use_docs = false;
       use_ratings = true;
+    } else if (strcmp(argv[i], "-init0") == 0) {
+      perturb_only_beta_shape = true;
+    } else if (strcmp(argv[i], "-lda") == 0) {
+      lda = true;
     } else if (i > 0) {
       fprintf(stdout,  "error: unknown option %s\n", argv[i]);
       assert(0);
@@ -181,12 +187,15 @@ main(int argc, char **argv)
 	  gen_heldout, dataset,
 	  batch, binary_data, vb, explore, 
 	  fixeda, vbinit, vbinit_iterations,
-	  use_docs, use_ratings);
+	  use_docs, use_ratings, perturb_only_beta_shape,
+	  lda);
+
   env_global = &env;
   if (p) {
     postprocess(env);
     exit(0);
   }
+  
   Ratings ratings(env);
   if (ratings.read(fname.c_str()) < 0) {
     fprintf(stderr, "error reading dataset from dir %s; quitting\n", 

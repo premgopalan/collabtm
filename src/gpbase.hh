@@ -12,6 +12,8 @@ public:
   virtual uint32_t k() const = 0;
   virtual double compute_elbo_term_helper() const = 0;
   virtual void save_state(const IDMap &m) const = 0;
+  virtual void load_from_lda(string dir, double alpha, uint32_t K) 
+  { lerr("load_from_lda() unimplemented!\n"); }
   void  make_nonzero(double av, double bv,
 		     double &a, double &b) const;
   string name() const { return _name; }
@@ -98,6 +100,7 @@ public:
   void initialize();
   void initialize_exp();
   void save_state(const IDMap &m) const;
+  void load_from_lda(string dir, double alpha, uint32_t K);
 
   double compute_elbo_term_helper() const;
 
@@ -270,6 +273,30 @@ GPMatrix::save_state(const IDMap &m) const
 }
 
 
+inline void
+GPMatrix::load_from_lda(string dir, double alpha, uint32_t K)
+{
+  char buf[1024];
+  sprintf(buf, "%s/lda-fits/%s-lda-k%d.tsv", dir.c_str(), name().c_str(), K);
+  lerr("loading from %s", buf);
+  _Ev.load(buf, 0);
+  double **vd1 = _Ev.data();
+  double **vd2 = _Elogv.data();
+
+  Array b(_k);  
+  for (uint32_t i = 0; i < _n; ++i) {
+    double s = _Ev.sum(i) + alpha * _n;
+    for (uint32_t k = 0; k < _k; ++k) {
+      double counts = vd1[i][k];
+      vd1[i][k] = (alpha + counts) / s;
+      vd2[i][k] = gsl_sf_psi(alpha + counts) - gsl_sf_psi(s);
+    }
+  }
+  IDMap m;
+  string expv_fname = string("/") + name() + ".tsv";
+  _Ev.save(Env::file_str(expv_fname), m);
+}
+
 class GPMatrixGR : public GPBase<Matrix> { // global rates
 public:
   GPMatrixGR(string name, 
@@ -323,6 +350,7 @@ public:
   void initialize_exp();
   double compute_elbo_term_helper() const;
   void save_state(const IDMap &m) const;
+  void load_from_lda(string dir, double alpha, uint32_t K);
 
 private:
   uint32_t _n;
@@ -501,6 +529,29 @@ GPMatrixGR::save_state(const IDMap &m) const
   string rate_fname = string("/") + name() + "_scale.tsv";
   _scurr.save(Env::file_str(shape_fname), m);
   _rcurr.save(Env::file_str(rate_fname), m);
+  _Ev.save(Env::file_str(expv_fname), m);
+}
+
+inline void
+GPMatrixGR::load_from_lda(string dir, double alpha, uint32_t K)
+{
+  char buf[1024];
+  sprintf(buf, "%s/lda-fits/%s-lda-k%d.tsv", dir.c_str(), name().c_str(), K);
+  lerr("loading from %s", buf);
+  _Ev.load(buf, 0, true);
+  double **vd1 = _Ev.data();
+  double **vd2 = _Elogv.data();
+
+  for (uint32_t k = 0; k < _k; ++k) {
+    double s = _Ev.colsum(k) + alpha * _n;
+    for (uint32_t i = 0; i < _n; ++i) {
+      double counts = vd1[i][k];
+      vd1[i][k] = (alpha + counts) / s;
+      vd2[i][k] = gsl_sf_psi(alpha + counts) - gsl_sf_psi(s);
+    }
+  }
+  IDMap m;
+  string expv_fname = string("/") + name() + ".tsv";
   _Ev.save(Env::file_str(expv_fname), m);
 }
 
