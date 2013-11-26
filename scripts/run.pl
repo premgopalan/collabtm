@@ -56,14 +56,17 @@ my @cmds6 = ("$bin -dir $loc -nusers 80278 -ndocs 261248 -nvocab 10000 -k 100 -d
 	     "$bin -dir $loc -nusers 80278 -ndocs 261248 -nvocab 10000 -k 100 -vb -fixeda");
 
 my @cmds2 = (
-	     "$bin -dir $loc -nusers 80278 -ndocs 261248 -nvocab 10000 -k 100 -vb",
-	     "$bin -dir $loc -nusers 80278 -ndocs 261248 -nvocab 10000 -k 10 -vb -fixeda",
-	     "$bin -dir $loc -nusers 80278 -ndocs 261248 -nvocab 10000 -k 100 -vb -fixeda",
-	     "$bin -dir $loc -nusers 80278 -ndocs 261248 -nvocab 10000 -k 10 -vbinit 10 -fixeda",
-	     "$bin -dir $loc -nusers 80278 -ndocs 261248 -nvocab 10000 -k 100 -vbinit 10 -fixeda");
+    #"$bin -dir $loc -nusers 80278 -ndocs 261248 -nvocab 10000 -k 200 -lda -fixeda -label defprior",
+    #"$bin -dir $loc -nusers 80278 -ndocs 261248 -nvocab 10000 -k 200 -lda-init -label defprior",
+    #"$bin -dir $loc -nusers 80278 -ndocs 261248 -nvocab 10000 -k 200 -lda-init -fixeda -label defprior");
+    "$bin -dir $loc -nusers 80278 -ndocs 261248 -nvocab 10000 -k 300",
+    "$bin -dir $loc -nusers 80278 -ndocs 261248 -nvocab 10000 -k 300 -fixeda",
+    "$bin -dir $loc -nusers 80278 -ndocs 261248 -nvocab 10000 -k 300 -fixeda -vb");
+    #"$bin -dir $loc -nusers 80278 -ndocs 261248 -nvocab 10000 -k 100 -vb");
 
 
-foreach my $cmd (@cmds6) {
+
+foreach my $cmd (@cmds2) {
     print "CMD = $cmd\n";
     system("$cmd 2>&1 > /dev/null &");
 }

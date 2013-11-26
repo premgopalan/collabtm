@@ -62,7 +62,7 @@ public:
     _rcurr(n,k),
     _Ev(n,k),
     _Elogv(n,k),
-    _r(r) { }
+    _r(r) { lerr("sprior = %f, rprior = %f", _sprior, _rprior); }
   virtual ~GPMatrix() {} 
 
   uint32_t n() const { return _n;}
@@ -285,7 +285,7 @@ GPMatrix::load_from_lda(string dir, double alpha, uint32_t K)
 
   Array b(_k);  
   for (uint32_t i = 0; i < _n; ++i) {
-    double s = _Ev.sum(i) + alpha * _n;
+    double s = _Ev.sum(i) + alpha * _k;
     for (uint32_t k = 0; k < _k; ++k) {
       double counts = vd1[i][k];
       vd1[i][k] = (alpha + counts) / s;
@@ -313,7 +313,7 @@ public:
     _rcurr(k),
     _Ev(n,k),
     _Elogv(n,k),
-    _r(r) { }
+    _r(r) { lerr("sprior = %f, rprior = %f", _sprior, _rprior); }
   virtual ~GPMatrixGR() {} 
 
   uint32_t n() const { return _n;}
@@ -567,7 +567,7 @@ public:
     _scurr(n), _snext(n),
     _rnext(n), _rcurr(n),
     _Ev(n), _Elogv(n),
-    _r(r) { }
+    _r(r) { lerr("sprior = %f, rprior = %f", _sprior, _rprior); }
   ~GPArray() {}
 
   uint32_t n() const { return _n;}

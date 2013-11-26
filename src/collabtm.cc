@@ -1,6 +1,6 @@
 #include "collabtm.hh"
 
-//#define INIT_TEST 1
+#define DEFAULT_INIT 1
 
 CollabTM::CollabTM(Env &env, Ratings &ratings)
   : _env(env), _ratings(ratings),
@@ -11,12 +11,17 @@ CollabTM::CollabTM(Env &env, Ratings &ratings)
     _iter(0),
     _start_time(time(0)),
     
-#ifdef INIT_TEST
-    _theta("theta", 0.3, (double)1000./_nusers, _ndocs,_k,&_r),
-    _beta("beta", 0.3, (double)1000./_ndocs, _nvocab,_k,&_r),
-    _x("x", 0.3, (double)1000./_ndocs, _nusers,_k,&_r),
-    _epsilon("epsilon", 0.3, (double)1000./_nusers, _ndocs,_k,&_r),
+#ifdef DEFAULT_INIT
+    _theta("theta", 0.3, 0.3, _ndocs,_k,&_r),
+    _beta("beta", 0.3, 0.3, _nvocab,_k,&_r),
+    _x("x", 0.3, 0.3, _nusers,_k,&_r),
+    _epsilon("epsilon", 0.3, 0.3, _ndocs,_k,&_r),
     _a("a", 0.3, 0.3, _ndocs, &_r)
+    // _theta("theta", 0.3, (double)1000./_nusers, _ndocs,_k,&_r),
+    // _beta("beta", 0.3, (double)1000./_ndocs, _nvocab,_k,&_r),
+    // _x("x", 0.3, (double)1000./_ndocs, _nusers,_k,&_r),
+    // _epsilon("epsilon", 0.3, (double)1000./_nusers, _ndocs,_k,&_r),
+    // _a("a", 0.3, 0.3, _ndocs, &_r)
 #else
     _theta("theta", (double)1./_k, (double)1./_k, _ndocs,_k,&_r),
     _beta("beta", (double)1./_k, (double)1./_k, _nvocab,_k,&_r),
@@ -41,18 +46,26 @@ CollabTM::CollabTM(Env &env, Ratings &ratings)
 void
 CollabTM::initialize()
 {
-  if (_env.lda) {
+  if (_env.use_docs) {
+    if (_env.lda) { // fix lda topics and doc memberships
+      
+      _beta.load_from_lda(_env.datfname, 0.01, _k); // eek! fixme.
+      _theta.load_from_lda(_env.datfname, 0.1, _k);
+      lerr("loaded lda fits");
 
-    _beta.load_from_lda(_env.datfname, 0.01, _k); // eek! fixme.
-    _theta.load_from_lda(_env.datfname, 0.1, _k);
-    lerr("loaded lda fits");
-
-  } else if (_env.use_docs) {
-    _beta.initialize();
-    _theta.initialize();
-
-    _theta.initialize_exp();
-    _beta.initialize_exp();
+    } else if (_env.lda_init) { // lda based init
+      _beta.initialize();
+      _theta.set_to_prior_curr();
+      
+      _beta.load_from_lda(_env.datfname, 0.01, _k); // eek! fixme.
+      _theta.load_from_lda(_env.datfname, 0.1, _k);
+    } else { // random init
+      _beta.initialize();
+      _theta.initialize();
+      
+      _theta.initialize_exp();
+      _beta.initialize_exp();
+    }
   }
 
   if (_env.use_ratings) {
@@ -113,7 +126,7 @@ CollabTM::get_phi(GPBase<Matrix> &a, uint32_t ai,
 void
 CollabTM::get_xi(uint32_t nu, uint32_t nd, 
 		 Array &xi,
-		 Array &xi_a, 
+		 Array &xi_a,
 		 Array &xi_b)
 {
   assert (xi.size() == 2 *_k && xi_a.size() == _k && xi_b.size() == _k);
@@ -212,7 +225,7 @@ CollabTM::batch_infer()
 	}
       }
     }
-
+    
     if (_env.vb || (_env.vbinit && _iter < _env.vbinit_iter))
       update_all_rates_in_seq();
     else {

@@ -80,6 +80,7 @@ main(int argc, char **argv)
 
   uint32_t nusers, ndocs, nvocab;
   bool lda = false;
+  bool lda_init = false;
 
   uint32_t i = 0;
   while (i <= argc - 1) {
@@ -173,6 +174,8 @@ main(int argc, char **argv)
       perturb_only_beta_shape = true;
     } else if (strcmp(argv[i], "-lda") == 0) {
       lda = true;
+    } else if (strcmp(argv[i], "-lda-init") == 0) {
+      lda_init = true;
     } else if (i > 0) {
       fprintf(stdout,  "error: unknown option %s\n", argv[i]);
       assert(0);
@@ -188,7 +191,7 @@ main(int argc, char **argv)
 	  batch, binary_data, vb, explore, 
 	  fixeda, vbinit, vbinit_iterations,
 	  use_docs, use_ratings, perturb_only_beta_shape,
-	  lda);
+	  lda, lda_init);
 
   env_global = &env;
   if (p) {
