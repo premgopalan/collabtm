@@ -85,4 +85,4 @@ theta-lda-k100.tsv, respectively.
 CHONG's GIBBS SAMPLER
 ---------------------
 
-
+See the package under "lda" directory.
