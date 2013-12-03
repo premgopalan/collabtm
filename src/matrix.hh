@@ -1146,17 +1146,17 @@ D2Array<double>::load(string name, uint32_t skipcols,
       n++;
     } while (p != NULL);
     if (transpose) {
-      if (n != _m)
-	lerr("n = %d, _m = %d\n", n, _m);
+      //if (n != _m)
+      //lerr("n = %d, _m = %d\n", n, _m);
       assert (n == _m);
     } else if (n != _n) {
-      lerr("n = %d, _n = %d\n", n, _n);
-      assert (n == _n);
+      //lerr("n = %d, _n = %d\n", n, _n);
+      //assert (n == _n);
     }
     m++;
     memset(line, 0, sz);
   }
-  lerr("read %d lines\n", m);
+  //lerr("read %d lines\n", m);
   //assert (m == _m);
   fclose(f);
   free(line);

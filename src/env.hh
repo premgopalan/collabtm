@@ -69,7 +69,7 @@ public:
       uint32_t vbinit_iterations, 
       bool doc_only, bool ratings_only,
       bool perturb_only_beta_shape,
-      bool lda, bool lda_init);
+      bool lda, bool lda_init, bool ppc);
 
   ~Env() { fclose(_plogf); }
 
@@ -119,6 +119,7 @@ public:
   bool perturb_only_beta_shape;
   bool lda;
   bool lda_init;
+  bool ppc;
 
   template<class T> static void plog(string s, const T &v);
   static string file_str(string fname);
@@ -214,7 +215,7 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
 	 uint32_t vbinit_iterations,
 	 bool use_docv, bool use_ratingsv,
 	 bool perturb_only_beta_shapev,
-	 bool ldav, bool lda_initv)
+	 bool ldav, bool lda_initv, bool ppcv)
   : dataset(datasetv),
     ndocs(ndocs_v),
     nvocab(nvocab_v),
@@ -253,7 +254,8 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
     use_ratings(use_ratingsv),
     perturb_only_beta_shape(perturb_only_beta_shapev),
     lda(ldav),
-    lda_init(lda_initv)
+    lda_init(lda_initv),
+    ppc(ppcv)
 {
   ostringstream sa;
   sa << "nusers" << nusers << "-";

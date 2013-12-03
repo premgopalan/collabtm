@@ -12,6 +12,7 @@ public:
   virtual uint32_t k() const = 0;
   virtual double compute_elbo_term_helper() const = 0;
   virtual void save_state(const IDMap &m) const = 0;
+  virtual void load()  = 0;
   virtual void load_from_lda(string dir, double alpha, uint32_t K) 
   { lerr("load_from_lda() unimplemented!\n"); }
   void  make_nonzero(double av, double bv,
@@ -69,7 +70,8 @@ public:
   uint32_t k() const { return _k;}
 
   void save() const;
-  
+  void load();
+
   const Matrix &shape_curr() const         { return _scurr; }
   const Matrix &rate_curr() const          { return _rcurr; }
   const Matrix &shape_next() const         { return _snext; }
@@ -272,6 +274,15 @@ GPMatrix::save_state(const IDMap &m) const
   _Ev.save(Env::file_str(expv_fname), m);
 }
 
+inline void
+GPMatrix::load()
+{
+  string shape_fname = name() + "_shape.tsv";
+  string rate_fname = name() + "_scale.tsv";
+  _scurr.load(shape_fname);
+  _rcurr.load(rate_fname);
+  compute_expectations();
+}
 
 inline void
 GPMatrix::load_from_lda(string dir, double alpha, uint32_t K)
@@ -349,7 +360,9 @@ public:
   void initialize();
   void initialize_exp();
   double compute_elbo_term_helper() const;
+
   void save_state(const IDMap &m) const;
+  void load();
   void load_from_lda(string dir, double alpha, uint32_t K);
 
 private:
@@ -533,6 +546,16 @@ GPMatrixGR::save_state(const IDMap &m) const
 }
 
 inline void
+GPMatrixGR::load()
+{
+  string shape_fname = name() + "_shape.tsv";
+  string rate_fname = name() + "_scale.tsv";
+  _scurr.load(shape_fname);
+  _rcurr.load(rate_fname);
+  compute_expectations();
+}
+
+inline void
 GPMatrixGR::load_from_lda(string dir, double alpha, uint32_t K)
 {
   char buf[1024];
@@ -604,6 +627,7 @@ public:
 
   double compute_elbo_term_helper() const;
   void save_state(const IDMap &m) const;
+  void load();
 
 private:
   uint32_t _n;
@@ -732,6 +756,16 @@ GPArray::save_state(const IDMap &m) const
   _scurr.save(Env::file_str(shape_fname), m);
   _rcurr.save(Env::file_str(rate_fname), m);
   _Ev.save(Env::file_str(expv_fname), m);
+}
+
+inline void
+GPArray::load()
+{
+  string shape_fname = name() + "_shape.tsv";
+  string rate_fname = name() + "_scale.tsv";
+  _scurr.load(shape_fname);
+  _rcurr.load(rate_fname);
+  compute_expectations();
 }
 
 #endif

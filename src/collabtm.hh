@@ -11,6 +11,7 @@ public:
   ~CollabTM() { fclose(_af); }
   
   void batch_infer();
+  void ppc();
 
 private:
   void initialize();

@@ -40,6 +40,8 @@ COLLABTM: Nonnegative Collaborative Topic Modeling tool
 
     -ratings-only            use ratings data only
 
+    -lda-init                use LDA based initialization (see below)
+
 INPUT 
 -----
 
@@ -61,4 +63,26 @@ Run two versions -- with the correction scalar 'a' inferred and one with 'a' fix
 /disk/scratch1/prem/collabtm/src/collabtm -dir /disk/scratch1/prem/collabtm/analysis/mendeley -nusers 80278 -ndocs 261248 -nvocab 10000 -k 100
 
 /disk/scratch1/prem/collabtm/src/collabtm -dir /disk/scratch1/prem/collabtm/analysis/mendeley -nusers 80278 -ndocs 261248 -nvocab 10000 -k 100 -fixeda 
+
+
+LDA BASED INITIALIZATION
+------------------------
+
+1. Run Chong's gibbs sampler to obtain LDA fits on the word frequencies.
+
+2. Create a directory "lda-fits" within the "dataset directory" above and put
+two files in it: the topics beta-lda-k<K>.tsv and the memberships
+theta-lda-k<K>.tsv.  If K=100, these files will be named beta-lda-k100.tsv and
+theta-lda-k100.tsv, respectively.
+
+3. Run collabtm inference with the -lda-init option as follows (the -fixeda option fixes 'a' at 1):
+
+/disk/scratch1/prem/collabtm/src/collabtm -dir /disk/scratch1/prem/collabtm/analysis/mendeley -nusers 80278 -ndocs 261248 -nvocab 10000 -k 100 -lda-init
+
+/disk/scratch1/prem/collabtm/src/collabtm -dir /disk/scratch1/prem/collabtm/analysis/mendeley -nusers 80278 -ndocs 261248 -nvocab 10000 -k 100 -lda-init -fixeda
+
+
+CHONG's GIBBS SAMPLER
+---------------------
+
 

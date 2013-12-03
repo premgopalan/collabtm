@@ -548,4 +548,68 @@ CollabTM::save_model()
   }
 }
 
+void
+CollabTM::ppc()
+{
+  printf("loading theta\n");
+  _theta.load();
+  printf("done\n");
+  fflush(stdout);
+  printf("loading beta\n");
+  _beta.load();
+  printf("done\n");
+  fflush(stdout);
+  //_epsilon.load();
+  //_x.load();
 
+  const double **theta_shape_curr = _theta.shape_curr().const_data();
+  const double **theta_rate_curr = _theta.rate_curr().const_data();
+  const double **beta_shape_curr = _beta.shape_curr().const_data();
+  const double *beta_rate_curr = _beta.rate_curr().const_data();
+
+  // generate data for users and documents
+  char buf[1024];
+  sprintf(buf, "ppc.tsv");
+  FILE *f = fopen(buf, "w");
+    
+  for (uint32_t nd = 0; nd < _ndocs; ++nd) {
+    const WordVec *w = _ratings.get_words(nd);
+
+    uint32_t maxword = 0;
+    uint32_t maxcount = 0;
+    for (uint32_t nw = 0; w && nw < w->size(); nw++) {
+      WordCount p = (*w)[nw];
+      uint32_t word = p.first;
+      uint32_t count = p.second;  
+      if (count > maxcount) {
+	maxcount = count;
+	maxword = word;
+      }
+    }
+
+    uint32_t nw = maxword;
+    fprintf(f, "%d\t%d\t%d\t%d\n", nd, nw, 0, maxcount);
+    for (uint32_t rep = 1; rep < 1000; rep++) {
+      uint32_t yrep = .0;
+      double s = .0;
+      for (uint32_t k = 0; k < _k; k++) {
+	if (beta_rate_curr[k] > .0 && theta_rate_curr[nd][k] > .0) {
+	  double rtheta = gsl_ran_gamma(_r, theta_shape_curr[nd][k], 
+					1 / theta_rate_curr[nd][k]);
+	  double rbeta = gsl_ran_gamma(_r, beta_shape_curr[nw][k],
+				       1 / beta_rate_curr[k]);
+	  s += rtheta * rbeta;
+	}
+      }
+      
+      lerr("s = %f", s);
+      yrep = gsl_ran_poisson(_r, s);
+      lerr("rep = %d, s = %f, yrep = %d", rep, s, yrep);
+      lerr("rep = %d, yrep = %d, yobs = %d, word = %d\n", rep, yrep, maxcount, maxword);
+      fprintf(f, "%d\t%d\t%d\t%d\n", nd, nw, rep, yrep);
+    }
+    if (nd > 100)
+      break;
+  }
+  fclose(f);
+}
