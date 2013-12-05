@@ -92,6 +92,7 @@ public:
   void set_to_prior();
   void set_to_prior_curr();
   void update_shape_next(uint32_t n, const Array &sphi);
+  void update_shape_next(uint32_t n, const uArray &sphi);
   void update_rate_next(const Array &u, const Array &scale);
   void update_rate_next(const Array &u);
 
@@ -138,6 +139,13 @@ GPMatrix::set_to_prior_curr()
 
 inline void
 GPMatrix::update_shape_next(uint32_t n, const Array &sphi)
+{
+  _snext.add_slice(n, sphi);
+  //printf("snext = %s\n", _snext.s().c_str());
+}
+
+inline void
+GPMatrix::update_shape_next(uint32_t n, const uArray &sphi)
 {
   _snext.add_slice(n, sphi);
   //printf("snext = %s\n", _snext.s().c_str());
@@ -219,6 +227,7 @@ GPMatrix::initialize()
   for (uint32_t i = 0; i < _n; ++i)
     for (uint32_t k = 0; k < _k; ++k)
       bd[i][k] = bd[0][k];
+  set_to_prior();
 }
 
 inline void
@@ -351,6 +360,7 @@ public:
   void set_to_prior_curr();
   void update_shape_next(const Array &phi);
   void update_shape_next(uint32_t n, const Array &sphi);
+  void update_shape_next(uint32_t n, const uArray &sphi);
 
   void update_rate_next(const Array &u);
   void swap();
@@ -396,6 +406,12 @@ GPMatrixGR::set_to_prior_curr()
 
 inline void
 GPMatrixGR::update_shape_next(uint32_t n, const Array &sphi)
+{
+  _snext.add_slice(n, sphi);
+}
+
+inline void
+GPMatrixGR::update_shape_next(uint32_t n, const uArray &sphi)
 {
   _snext.add_slice(n, sphi);
 }
@@ -455,7 +471,6 @@ GPMatrixGR::scaled_sum_rows(Array &v, const Array &scale)
       v[k] += ev[i][k] * scale[i];
 }
 
-
 inline void
 GPMatrixGR::initialize()
 {
@@ -489,6 +504,7 @@ GPMatrixGR::initialize()
 
   for (uint32_t k = 0; k < _k; ++k)
     bd[k] = _rprior + 0.1 * gsl_rng_uniform(*_r);
+  set_to_prior();
 }
 
 inline void
@@ -506,7 +522,6 @@ GPMatrixGR::initialize_exp()
       vd2[i][k] = gsl_sf_psi(ad[i][k]) - log(b[k]);
     }
   set_to_prior();
-
 } 
 
 inline double

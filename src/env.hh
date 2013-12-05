@@ -69,7 +69,8 @@ public:
       uint32_t vbinit_iterations, 
       bool doc_only, bool ratings_only,
       bool perturb_only_beta_shape,
-      bool lda, bool lda_init, bool ppc);
+      bool lda, bool lda_init, bool ppc, 
+      bool seq_init, bool seq_init_samples);
 
   ~Env() { fclose(_plogf); }
 
@@ -120,6 +121,8 @@ public:
   bool lda;
   bool lda_init;
   bool ppc;
+  bool seq_init;
+  bool seq_init_samples;
 
   template<class T> static void plog(string s, const T &v);
   static string file_str(string fname);
@@ -215,7 +218,8 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
 	 uint32_t vbinit_iterations,
 	 bool use_docv, bool use_ratingsv,
 	 bool perturb_only_beta_shapev,
-	 bool ldav, bool lda_initv, bool ppcv)
+	 bool ldav, bool lda_initv, bool ppcv,
+	 bool seq_initv, bool seq_init_samplesv)
   : dataset(datasetv),
     ndocs(ndocs_v),
     nvocab(nvocab_v),
@@ -255,7 +259,9 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
     perturb_only_beta_shape(perturb_only_beta_shapev),
     lda(ldav),
     lda_init(lda_initv),
-    ppc(ppcv)
+    ppc(ppcv),
+    seq_init(seq_initv), 
+    seq_init_samples(seq_init_samplesv)
 {
   ostringstream sa;
   sa << "nusers" << nusers << "-";
@@ -302,8 +308,15 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
   
   if (lda)
     sa << "-lda";
+
   if (lda_init)
     sa << "-ldainit";
+  
+  if (seq_initv)
+    sa << "-seqinit";
+
+  if (seq_init_samplesv)
+    sa << "-seqinit-samples";
 
   prefix = sa.str();
   level = Logger::TEST;
@@ -334,6 +347,8 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
   plog("perturb_only_beta_shape", perturb_only_beta_shape);
   plog("lda", lda);
   plog("lda-init", lda_init);
+  plog("seq-init", seq_init);
+  plog("seq-init-samples", seq_init_samples);
   
   //string ndatfname = file_str("/network.dat");
   //unlink(ndatfname.c_str());

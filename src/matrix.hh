@@ -834,6 +834,7 @@ public:
   int copy_from(const D2Array<T> &a);
   int add_to(const D2Array<T> &a);
   void add_slice(uint32_t p, const D1Array<T> &u);
+  void add_slice(uint32_t p, const D1Array<uint32_t> &u);
   void sub_slice(uint32_t p, const D1Array<T> &u);
 
   D2Array<T> & scale(T s);
@@ -1038,6 +1039,16 @@ D2Array<T>::add_slice(uint32_t p, const D1Array<T> &u)
   for (uint32_t i = 0; i < u.n(); ++i)
     _data[p][i] += ud[i];
 }
+
+template<class T> inline void
+D2Array<T>::add_slice(uint32_t p, const D1Array<uint32_t> &u)
+{
+  assert (_n <= u.n());
+  const uint32_t * const ud = u.data(); 
+  for (uint32_t i = 0; i < u.n(); ++i)
+    _data[p][i] += ud[i];
+}
+
 
 template<class T> inline void
 D2Array<T>::sub_slice(uint32_t p, const D1Array<T> &u)

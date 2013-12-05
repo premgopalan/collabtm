@@ -52,7 +52,7 @@ CollabTM::initialize()
       _beta.load_from_lda(_env.datfname, 0.01, _k); // eek! fixme.
       _theta.load_from_lda(_env.datfname, 0.1, _k);
       lerr("loaded lda fits");
-
+      
     } else if (_env.lda_init) { // lda based init
       _beta.initialize();
       _theta.set_to_prior_curr();
@@ -107,6 +107,18 @@ CollabTM::initialize_perturb_betas()
 }
 
 void
+CollabTM::seq_init()
+{
+  assert (_env.use_docs && !_env.use_ratings); // xxx temporary
+  _beta.set_to_prior_curr();
+  _beta.set_to_prior();
+  _beta.compute_expectations();
+  _theta.set_to_prior_curr();
+  _theta.set_to_prior();
+  _theta.compute_expectations();
+}
+
+void
 CollabTM::get_phi(GPBase<Matrix> &a, uint32_t ai, 
 		  GPBase<Matrix> &b, uint32_t bi, 
 		  Array &phi)
@@ -155,6 +167,8 @@ CollabTM::batch_infer()
 {
   if (_env.perturb_only_beta_shape)
     initialize_perturb_betas();
+  else if (_env.seq_init)
+    seq_init();
   else
     initialize();
 
@@ -164,7 +178,8 @@ CollabTM::batch_infer()
   Array xi(2*_k);
   Array xi_a(_k);
   Array xi_b(_k);
-
+  uArray s(_k);
+	    
   while(1) {
 
     if (_env.use_docs && !_env.lda) {
@@ -178,11 +193,20 @@ CollabTM::batch_infer()
 	  uint32_t count = p.second;
 	  
 	  get_phi(_theta, nd, _beta, word, phi);
-	  if (count > 1)
-	    phi.scale(count);
-	  
-	  _theta.update_shape_next(nd, phi);
-	  _beta.update_shape_next(word, phi);
+
+	  if ((_env.seq_init && _iter == 0) ||
+	      _env.seq_init_samples) {
+	    // sample from the phis
+	    gsl_ran_multinomial(_r, _k, count, phi.const_data(), s.data());
+	    _theta.update_shape_next(nd, s);
+	    _beta.update_shape_next(word, s);
+	    
+	  } else {
+	    if (count > 1)
+	      phi.scale(count);
+	    _theta.update_shape_next(nd, phi);
+	    _beta.update_shape_next(word, phi);
+	  }
 	}
       }
     }

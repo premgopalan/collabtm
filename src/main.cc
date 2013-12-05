@@ -82,6 +82,8 @@ main(int argc, char **argv)
   bool lda = false;
   bool lda_init = false;
   bool ppc = false;
+  bool seq_init = false;
+  bool seq_init_samples = false;
 
   uint32_t i = 0;
   while (i <= argc - 1) {
@@ -179,6 +181,10 @@ main(int argc, char **argv)
       lda_init = true;
     } else if (strcmp(argv[i], "-ppc") == 0) {
       ppc = true;
+    } else if (strcmp(argv[i], "-seq-init") == 0) {
+      seq_init = true;
+    } else if (strcmp(argv[i], "-seq-init-samples") == 0) {
+      seq_init_samples = true;
     } else if (i > 0) {
       fprintf(stdout,  "error: unknown option %s\n", argv[i]);
       assert(0);
@@ -194,7 +200,7 @@ main(int argc, char **argv)
 	  batch, binary_data, vb, explore, 
 	  fixeda, vbinit, vbinit_iterations,
 	  use_docs, use_ratings, perturb_only_beta_shape,
-	  lda, lda_init, ppc);
+	  lda, lda_init, ppc, seq_init, seq_init_samples);
 
   env_global = &env;
   if (p) {

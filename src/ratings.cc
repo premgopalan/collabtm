@@ -69,6 +69,11 @@ Ratings::read_generic(FILE *f, CountMap *cmap)
       exit(-1);
     }
 
+    
+    IDMap::iterator mt = _movie2seq.find(mid);
+    if (_movies_read && mt == _movie2seq.end())  // skip this entry
+      continue;
+
     IDMap::iterator it = _user2seq.find(uid);
     if (it == _user2seq.end() && !add_user(uid)) {
       //printf("error: exceeded user limit %d, %d, %d\n",
@@ -76,11 +81,9 @@ Ratings::read_generic(FILE *f, CountMap *cmap)
       //fflush(stdout);
       continue;
     }
-    
-    IDMap::iterator mt = _movie2seq.find(mid);
-    if (_movies_read)
-      assert (mt != _movie2seq.end());
-    else if (mt == _movie2seq.end() && !add_movie(mid)) {
+
+	
+	if (mt == _movie2seq.end() && !add_movie(mid)) {
       printf("error: exceeded movie limit %d, %d, %d\n",
       uid, mid, rating);
       fflush(stdout);

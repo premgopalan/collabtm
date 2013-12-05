@@ -29,6 +29,7 @@ private:
   void swap_all();
   void compute_all_expectations();
   void save_model();
+  void seq_init();
   
   void save_user_state(string s, const Matrix &mat);
   void save_item_state(string s, const Matrix &mat);
