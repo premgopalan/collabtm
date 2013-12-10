@@ -116,6 +116,21 @@ CollabTM::seq_init()
   _theta.set_to_prior_curr();
   _theta.set_to_prior();
   _theta.compute_expectations();
+
+  if (_env.use_ratings) {
+    _x.set_to_prior_curr();
+    _x.set_to_prior();
+    _epsilon.set_to_prior_curr();
+    _epsilon.set_to_prior();
+    _x.compute_expectations();
+    _epsilon.compute_expectations();
+
+    if (!_env.fixeda) {
+      _a.set_to_prior_curr();
+      _a.set_to_prior();
+      _a.compute_expectations();
+    }
+  }
 }
 
 void
@@ -172,6 +187,9 @@ CollabTM::batch_infer()
   else
     initialize();
 
+  Array thetasum(_k);
+  _theta.sum_rows(thetasum);
+
   approx_log_likelihood();
 
   Array phi(_k);
@@ -185,7 +203,6 @@ CollabTM::batch_infer()
     if (_env.use_docs && !_env.lda) {
       
       for (uint32_t nd = 0; nd < _ndocs; ++nd) {
-	
 	const WordVec *w = _ratings.get_words(nd);
 	for (uint32_t nw = 0; w && nw < w->size(); nw++) {
 	  WordCount p = (*w)[nw];
@@ -198,14 +215,24 @@ CollabTM::batch_infer()
 	      _env.seq_init_samples) {
 	    // sample from the phis
 	    gsl_ran_multinomial(_r, _k, count, phi.const_data(), s.data());
-	    _theta.update_shape_next(nd, s);
 	    _beta.update_shape_next(word, s);
-	    
 	  } else {
 	    if (count > 1)
 	      phi.scale(count);
 	    _theta.update_shape_next(nd, phi);
 	    _beta.update_shape_next(word, phi);
+	  }
+	}
+
+	if (nd % 100 == 0) {
+	  if ((_env.seq_init && _iter == 0) || 
+	      (_env.seq_init_samples && _iter == 0)) {
+	    
+	    _beta.update_rate_next(thetasum);
+	    _beta.swap();
+	    _beta.compute_expectations();
+	    if (nd % 100 == 0)
+	      lerr("done document %d", nd);
 	  }
 	}
       }
@@ -249,13 +276,17 @@ CollabTM::batch_infer()
 	}
       }
     }
-    
-    if (_env.vb || (_env.vbinit && _iter < _env.vbinit_iter))
-      update_all_rates_in_seq();
-    else {
-      update_all_rates();
-      swap_all();
-      compute_all_expectations();
+
+    if (!((_env.seq_init && _iter == 0) ||	
+	  (_env.seq_init_samples && _iter == 0))) {
+
+      if (_env.vb || (_env.vbinit && _iter < _env.vbinit_iter))
+	update_all_rates_in_seq();
+      else {
+	update_all_rates();
+	swap_all();
+	compute_all_expectations();
+      }
     }
 
     if (_iter % 10 == 0) {
