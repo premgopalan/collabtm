@@ -63,7 +63,7 @@ public:
     _rcurr(n,k),
     _Ev(n,k),
     _Elogv(n,k),
-    _r(r) { lerr("sprior = %f, rprior = %f", _sprior, _rprior); }
+    _r(r) { } 
   virtual ~GPMatrix() {} 
 
   uint32_t n() const { return _n;}
@@ -91,10 +91,14 @@ public:
 
   void set_to_prior();
   void set_to_prior_curr();
+
   void update_shape_next(uint32_t n, const Array &sphi);
   void update_shape_next(uint32_t n, const uArray &sphi);
+  void update_shape_curr(uint32_t n, const uArray &sphi);
+
   void update_rate_next(const Array &u, const Array &scale);
   void update_rate_next(const Array &u);
+  void update_rate_curr(const Array &u);
 
   void swap();
   void compute_expectations();
@@ -148,7 +152,12 @@ inline void
 GPMatrix::update_shape_next(uint32_t n, const uArray &sphi)
 {
   _snext.add_slice(n, sphi);
-  //printf("snext = %s\n", _snext.s().c_str());
+}
+
+inline void
+GPMatrix::update_shape_curr(uint32_t n, const uArray &sphi)
+{
+  _scurr.add_slice(n, sphi);
 }
 
 inline void
@@ -167,6 +176,13 @@ GPMatrix::update_rate_next(const Array &u)
 {
   for (uint32_t i = 0; i < _n; ++i)
     _rnext.add_slice(i, u);
+}
+
+inline void
+GPMatrix::update_rate_curr(const Array &u)
+{
+  for (uint32_t i = 0; i < _n; ++i)
+    _rcurr.add_slice(i, u);
 }
 
 inline void
@@ -333,7 +349,7 @@ public:
     _rcurr(k),
     _Ev(n,k),
     _Elogv(n,k),
-    _r(r) { lerr("sprior = %f, rprior = %f", _sprior, _rprior); }
+    _r(r) { } 
   virtual ~GPMatrixGR() {} 
 
   uint32_t n() const { return _n;}
@@ -361,8 +377,10 @@ public:
   void update_shape_next(const Array &phi);
   void update_shape_next(uint32_t n, const Array &sphi);
   void update_shape_next(uint32_t n, const uArray &sphi);
+  void update_shape_curr(uint32_t n, const uArray &sphi);
 
   void update_rate_next(const Array &u);
+  void update_rate_curr(const Array &u);
   void swap();
   void compute_expectations();
   void sum_rows(Array &v);
@@ -417,9 +435,22 @@ GPMatrixGR::update_shape_next(uint32_t n, const uArray &sphi)
 }
 
 inline void
+GPMatrixGR::update_shape_curr(uint32_t n, const uArray &sphi)
+{
+  _scurr.add_slice(n, sphi);
+}
+
+inline void
 GPMatrixGR::update_rate_next(const Array &u)
 {
   _rnext += u;
+}
+
+
+inline void
+GPMatrixGR::update_rate_curr(const Array &u)
+{
+  _rcurr += u;
 }
 
 inline void
@@ -605,7 +636,7 @@ public:
     _scurr(n), _snext(n),
     _rnext(n), _rcurr(n),
     _Ev(n), _Elogv(n),
-    _r(r) { lerr("sprior = %f, rprior = %f", _sprior, _rprior); }
+    _r(r) { }
   ~GPArray() {}
 
   uint32_t n() const { return _n;}

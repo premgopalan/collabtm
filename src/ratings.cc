@@ -26,9 +26,12 @@ Ratings::read(string s)
     // this ordering allows doc id == doc seq
     // a necessary condition while loading LDA fits
     // into collabtm's beta and theta
-    read_generic_docs(s);
-    _movies_read = true;
-    read_generic_train(s);
+    if (_env.use_docs) {
+      read_generic_docs(s);
+      _movies_read = true;
+    }
+    if (_env.use_ratings)
+      read_generic_train(s);
   }
     
   char st[1024];

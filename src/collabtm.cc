@@ -107,30 +107,17 @@ CollabTM::initialize_perturb_betas()
 }
 
 void
-CollabTM::seq_init()
+CollabTM::seq_init_helper()
 {
-  assert (_env.use_docs && !_env.use_ratings); // xxx temporary
+  assert (_env.use_docs && !_env.use_ratings);
+
   _beta.set_to_prior_curr();
   _beta.set_to_prior();
   _beta.compute_expectations();
+
   _theta.set_to_prior_curr();
   _theta.set_to_prior();
   _theta.compute_expectations();
-
-  if (_env.use_ratings) {
-    _x.set_to_prior_curr();
-    _x.set_to_prior();
-    _epsilon.set_to_prior_curr();
-    _epsilon.set_to_prior();
-    _x.compute_expectations();
-    _epsilon.compute_expectations();
-
-    if (!_env.fixeda) {
-      _a.set_to_prior_curr();
-      _a.set_to_prior();
-      _a.compute_expectations();
-    }
-  }
 }
 
 void
@@ -178,18 +165,58 @@ CollabTM::get_xi(uint32_t nu, uint32_t nd,
 }
 
 void
-CollabTM::batch_infer()
+CollabTM::seq_init()
 {
-  if (_env.perturb_only_beta_shape)
-    initialize_perturb_betas();
-  else if (_env.seq_init)
-    seq_init();
-  else
-    initialize();
+  seq_init_helper();
 
   Array thetasum(_k);
   _theta.sum_rows(thetasum);
 
+  Array phi(_k);
+  uArray s(_k);
+  
+  for (uint32_t nd = 0; nd < _ndocs; ++nd) {
+    
+    const WordVec *w = _ratings.get_words(nd);
+    for (uint32_t nw = 0; w && nw < w->size(); nw++) {
+      WordCount p = (*w)[nw];
+      uint32_t word = p.first;
+      uint32_t count = p.second;
+      
+      get_phi(_theta, nd, _beta, word, phi);
+      
+      if (_iter == 0 || _env.seq_init_samples) {
+	gsl_ran_multinomial(_r, _k, count, phi.const_data(), s.data());
+	_beta.update_shape_curr(word, s);
+      }
+    }
+    
+    if (_iter == 0) {
+      if (nd % 100 == 0) {
+	_beta.update_rate_curr(thetasum);
+	_beta.compute_expectations();
+	lerr("done document %d", nd);
+      }
+    }
+  }
+  
+  // now betas are initialized
+  // beta shape and rate next variables are set to prior
+  lerr("initialization complete");
+  lerr("starting batch inference");
+}
+
+void
+CollabTM::batch_infer()
+{
+  if (!_env.seq_init && !_env.seq_init_samples) {
+    if (_env.perturb_only_beta_shape)
+      initialize_perturb_betas();
+    else
+      initialize();
+  } else
+    seq_init();
+  
   approx_log_likelihood();
 
   Array phi(_k);
@@ -203,6 +230,7 @@ CollabTM::batch_infer()
     if (_env.use_docs && !_env.lda) {
       
       for (uint32_t nd = 0; nd < _ndocs; ++nd) {
+
 	const WordVec *w = _ratings.get_words(nd);
 	for (uint32_t nw = 0; w && nw < w->size(); nw++) {
 	  WordCount p = (*w)[nw];
@@ -210,29 +238,20 @@ CollabTM::batch_infer()
 	  uint32_t count = p.second;
 	  
 	  get_phi(_theta, nd, _beta, word, phi);
-
-	  if ((_env.seq_init && _iter == 0) ||
-	      _env.seq_init_samples) {
-	    // sample from the phis
+	  
+	  if (_env.seq_init_samples) {
+	    
+	    // always sample from the phis
 	    gsl_ran_multinomial(_r, _k, count, phi.const_data(), s.data());
-	    _beta.update_shape_next(word, s);
+	    _beta.update_shape_curr(word, s);
+	    
 	  } else {
+	    
 	    if (count > 1)
 	      phi.scale(count);
 	    _theta.update_shape_next(nd, phi);
 	    _beta.update_shape_next(word, phi);
-	  }
-	}
-
-	if (nd % 100 == 0) {
-	  if ((_env.seq_init && _iter == 0) || 
-	      (_env.seq_init_samples && _iter == 0)) {
 	    
-	    _beta.update_rate_next(thetasum);
-	    _beta.swap();
-	    _beta.compute_expectations();
-	    if (nd % 100 == 0)
-	      lerr("done document %d", nd);
 	  }
 	}
       }
@@ -255,8 +274,10 @@ CollabTM::batch_infer()
 	      xi_b.scale(y);
 	      xi.scale(y);
 	    }
+	    
 	    if (!_env.lda)
 	      _theta.update_shape_next(nd, xi_a);
+	    
 	    _epsilon.update_shape_next(nd, xi_b);
 	    _x.update_shape_next(nu, xi_a);
 	    _x.update_shape_next(nu, xi_b);
@@ -277,16 +298,12 @@ CollabTM::batch_infer()
       }
     }
 
-    if (!((_env.seq_init && _iter == 0) ||	
-	  (_env.seq_init_samples && _iter == 0))) {
-
-      if (_env.vb || (_env.vbinit && _iter < _env.vbinit_iter))
-	update_all_rates_in_seq();
-      else {
-	update_all_rates();
-	swap_all();
-	compute_all_expectations();
-      }
+    if (_env.vb || (_env.vbinit && _iter < _env.vbinit_iter))
+      update_all_rates_in_seq();
+    else {
+      update_all_rates();
+      swap_all();
+      compute_all_expectations();
     }
 
     if (_iter % 10 == 0) {
@@ -294,6 +311,7 @@ CollabTM::batch_infer()
       approx_log_likelihood();
       save_model();
     }
+    
     if (_env.save_state_now)
       exit(0);
 
