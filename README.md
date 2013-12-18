@@ -42,6 +42,8 @@ COLLABTM: Nonnegative Collaborative Topic Modeling tool
 
     -lda-init                use LDA based initialization (see below)
 
+    -seq-init -doc-only	     use sequential initialization for document only fits
+
 INPUT 
 -----
 
