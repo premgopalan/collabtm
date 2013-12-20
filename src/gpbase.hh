@@ -53,7 +53,7 @@ public:
   GPMatrix(string name, double a, double b,
 	   uint32_t n, uint32_t k,
 	   gsl_rng **r): 
-    GPBase(name),
+    GPBase<Matrix>(name),
     _n(n), _k(k),
     _sprior(a), // shape 
     _rprior(b), // rate
@@ -339,7 +339,7 @@ public:
 	     double a, double b,
 	     uint32_t n, uint32_t k,
 	     gsl_rng **r):
-    GPBase(name),
+    GPBase<Matrix>(name),
     _n(n), _k(k),
     _sprior(a), // shape 
     _rprior(b), // rate
@@ -629,7 +629,7 @@ public:
   GPArray(string name, 
 	  double a, double b,
 	  uint32_t n, gsl_rng **r): 
-    GPBase(name),
+    GPBase<Array>(name),
     _n(n),
     _sprior(a), // shape 
     _rprior(b), // rate
