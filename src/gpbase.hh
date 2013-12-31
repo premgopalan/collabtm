@@ -670,6 +670,7 @@ public:
   void swap();
   void compute_expectations();
   void initialize();
+  void initialize_exp();
 
   double compute_elbo_term_helper() const;
   void save_state(const IDMap &m) const;
@@ -761,17 +762,8 @@ GPArray::initialize()
     ad[i] = _sprior + 0.01 * gsl_rng_uniform(*_r);
     bd[i] = _rprior + 0.1 * gsl_rng_uniform(*_r);
   }
-  
-  double *vd1 = _Ev.data();
-  double *vd2 = _Elogv.data();
-  
-  double v = _rprior + _n;
-  for (uint32_t i = 0; i < _n; ++i) {
-    vd1[i] = ad[i] / v;
-    vd2[i] = gsl_sf_psi(ad[i]) - log(v);
-  }
   set_to_prior();
-} 
+}
 
 inline double
 GPArray::compute_elbo_term_helper() const

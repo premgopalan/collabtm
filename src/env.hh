@@ -88,6 +88,7 @@ public:
   double tau0;
   double tau1;
   double heldout_ratio;
+  double heldout_items_ratio; // cold start
   double validation_ratio;
   int reportfreq;
   double epsilon;
@@ -228,6 +229,7 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
     tau0(0),
     tau1(0),
     heldout_ratio(0.2),
+    heldout_items_ratio(0.01),
     validation_ratio(0.01),
     reportfreq(rfreq),
     epsilon(0.001),
@@ -338,6 +340,7 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
   plog("k", k);
   plog("test_ratio", heldout_ratio);
   plog("validation_ratio", validation_ratio);
+  plog("heldout_items_ratio", heldout_items_ratio);
   plog("seed", seed);
   plog("reportfreq", reportfreq);
   plog("vbinit", vbinit);

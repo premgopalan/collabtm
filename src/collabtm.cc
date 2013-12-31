@@ -1,7 +1,5 @@
 #include "collabtm.hh"
 
-#define DEFAULT_INIT 1
-
 CollabTM::CollabTM(Env &env, Ratings &ratings)
   : _env(env), _ratings(ratings),
     _nusers(env.nusers), 
@@ -10,25 +8,12 @@ CollabTM::CollabTM(Env &env, Ratings &ratings)
     _k(env.k),
     _iter(0),
     _start_time(time(0)),
-    
-#ifdef DEFAULT_INIT
     _theta("theta", 0.3, 0.3, _ndocs,_k,&_r),
     _beta("beta", 0.3, 0.3, _nvocab,_k,&_r),
     _x("x", 0.3, 0.3, _nusers,_k,&_r),
     _epsilon("epsilon", 0.3, 0.3, _ndocs,_k,&_r),
-    _a("a", 0.3, 0.3, _ndocs, &_r)
-    // _theta("theta", 0.3, (double)1000./_nusers, _ndocs,_k,&_r),
-    // _beta("beta", 0.3, (double)1000./_ndocs, _nvocab,_k,&_r),
-    // _x("x", 0.3, (double)1000./_ndocs, _nusers,_k,&_r),
-    // _epsilon("epsilon", 0.3, (double)1000./_nusers, _ndocs,_k,&_r),
-    // _a("a", 0.3, 0.3, _ndocs, &_r)
-#else
-    _theta("theta", (double)1./_k, (double)1./_k, _ndocs,_k,&_r),
-    _beta("beta", (double)1./_k, (double)1./_k, _nvocab,_k,&_r),
-    _x("x", (double)1./_k, (double)1./_k, _nusers,_k,&_r),
-    _epsilon("epsilon", (double)1./_k, (double)1./_k, _ndocs,_k,&_r),
-    _a("a", (double)1./_k, (double)1./_k, _ndocs, &_r)
-#endif
+    _a("a", 0.3, 0.3, _ndocs, &_r),
+    _prev_h(.0), _nh(0)
 {
   gsl_rng_env_setup();
   const gsl_rng_type *T = gsl_rng_default;
@@ -41,6 +26,17 @@ CollabTM::CollabTM(Env &env, Ratings &ratings)
     printf("cannot open logl file:%s\n",  strerror(errno));
     exit(-1);
   }
+  _vf = fopen(Env::file_str("/validation.txt").c_str(), "w");
+  if (!_vf)  {
+    printf("cannot open heldout file:%s\n",  strerror(errno));
+    exit(-1);
+  }
+  _tf = fopen(Env::file_str("/test.txt").c_str(), "w");
+  if (!_tf)  {
+    printf("cannot open heldout file:%s\n",  strerror(errno));
+    exit(-1);
+  }
+  load_validation_and_test_sets();
 }
 
 void
@@ -54,12 +50,15 @@ CollabTM::initialize()
       lerr("loaded lda fits");
       
     } else if (_env.lda_init) { // lda based init
+      
       _beta.initialize();
       _theta.set_to_prior_curr();
       
       _beta.load_from_lda(_env.datfname, 0.01, _k); // eek! fixme.
       _theta.load_from_lda(_env.datfname, 0.1, _k);
+
     } else { // random init
+      
       _beta.initialize();
       _theta.initialize();
       
@@ -69,6 +68,7 @@ CollabTM::initialize()
   }
 
   if (_env.use_ratings) {
+
     _x.initialize();
     _epsilon.initialize();
     _x.initialize_exp();
@@ -109,8 +109,6 @@ CollabTM::initialize_perturb_betas()
 void
 CollabTM::seq_init_helper()
 {
-  assert (_env.use_docs && !_env.use_ratings);
-
   _beta.set_to_prior_curr();
   _beta.set_to_prior();
   _beta.compute_expectations();
@@ -118,7 +116,98 @@ CollabTM::seq_init_helper()
   _theta.set_to_prior_curr();
   _theta.set_to_prior();
   _theta.compute_expectations();
+
+  if (_env.use_ratings) {
+    _x.set_to_prior_curr();
+    _x.set_to_prior();
+    _x.compute_expectations();
+
+    _epsilon.set_to_prior_curr();
+    _epsilon.set_to_prior();
+    _epsilon.compute_expectations();
+    
+    if (!_env.fixeda) {
+      _a.set_to_prior();
+      _a.set_to_prior_curr();
+      _a.compute_expectations();
+    }
+  }
 }
+
+void
+CollabTM::load_validation_and_test_sets()
+{
+  char buf[4096];
+  sprintf(buf, "%s/validation.tsv", _env.datfname.c_str());
+  FILE *validf = fopen(buf, "r");
+  assert(validf);
+  _ratings.read_generic(validf, &_validation_map);
+  fclose(validf);
+
+  sprintf(buf, "%s/test.tsv", _env.datfname.c_str());
+  FILE *testf = fopen(buf, "r");
+  assert(testf);
+  _ratings.read_generic(testf, &_test_map);
+  fclose(testf);
+  printf("+ loaded validation and test sets from %s\n", _env.datfname.c_str());
+  fflush(stdout);
+
+  // select some documents for cold start recommendations
+  // remove them from training, test and validation
+  Env::plog("test ratings before removing heldout cold start docs", _test_map.size());
+  Env::plog("validation ratings before removing heldout cold start docs", _validation_map.size());
+
+  uint32_t c = 0;
+  while (c < _env.heldout_items_ratio * _env.ndocs) {
+    uint32_t n = gsl_rng_uniform_int(_r, _env.ndocs);
+    const vector<uint32_t> *u = _ratings.get_users(n);
+    assert(u);
+    uint32_t nusers = u->size();
+    if (nusers < 10)
+      continue;
+    _cold_start_docs[n] = true;
+  }
+  Env::plog("number of heldout cold start docs", _cold_start_docs.size());
+
+  CountMap::iterator i = _test_map.begin(); 
+  while (i != _test_map.end()) {
+    const Rating &r = i->first;
+    MovieMap::const_iterator itr = _cold_start_docs.find(r.second);
+    if (itr != _cold_start_docs.end())
+      _test_map.erase(i++);
+    else
+      ++i;
+  }
+  
+  CountMap::iterator j = _validation_map.begin(); 
+  while (j != _validation_map.end()) {
+    const Rating &r = i->first;
+    MovieMap::const_iterator itr = _cold_start_docs.find(r.second);
+    if (itr != _cold_start_docs.end())
+      _test_map.erase(j++);
+    else
+      ++j;
+  }
+  Env::plog("test ratings after", _test_map.size());
+  Env::plog("validation ratings after", _validation_map.size());
+
+  FILE *g = fopen("coldstart_docs.tsv", "w");
+  write_coldstart_docs(g, _cold_start_docs);
+  fclose(g);
+}
+
+void
+CollabTM::write_coldstart_docs(FILE *f, MovieMap &mp)
+{
+  for (MovieMap::const_iterator i = mp.begin(); i != mp.end(); ++i) {
+    uint32_t p = i->first;
+    const IDMap &movies = _ratings.seq2movie();
+    IDMap::const_iterator mi = movies.find(p);
+    fprintf(f, "%d\t%d\n", p, mi->second);
+  }
+  fflush(f);
+}
+
 
 void
 CollabTM::get_phi(GPBase<Matrix> &a, uint32_t ai, 
@@ -172,6 +261,9 @@ CollabTM::seq_init()
   Array thetasum(_k);
   _theta.sum_rows(thetasum);
 
+  Array betasum(_k);
+  _beta.sum_rows(betasum);
+
   Array phi(_k);
   uArray s(_k);
   
@@ -188,6 +280,8 @@ CollabTM::seq_init()
       if (_iter == 0 || _env.seq_init_samples) {
 	gsl_ran_multinomial(_r, _k, count, phi.const_data(), s.data());
 	_beta.update_shape_curr(word, s);
+	// xxx
+	_theta.update_shape_curr(nd, s);
       }
     }
     
@@ -195,13 +289,13 @@ CollabTM::seq_init()
       if (nd % 100 == 0) {
 	_beta.update_rate_curr(thetasum);
 	_beta.compute_expectations();
+	// xxx
+	_theta.update_rate_curr(betasum);
+	_theta.compute_expectations();
 	lerr("done document %d", nd);
       }
     }
   }
-  
-  // now betas are initialized
-  // beta shape and rate next variables are set to prior
   lerr("initialization complete");
   lerr("starting batch inference");
 }
@@ -225,8 +319,8 @@ CollabTM::batch_infer()
   Array xi_b(_k);
   uArray s(_k);
 	    
-  while(1) {
-
+  while (1) {
+    
     if (_env.use_docs && !_env.lda) {
       
       for (uint32_t nd = 0; nd < _ndocs; ++nd) {
@@ -249,6 +343,7 @@ CollabTM::batch_infer()
 	    
 	    if (count > 1)
 	      phi.scale(count);
+	    
 	    _theta.update_shape_next(nd, phi);
 	    _beta.update_shape_next(word, phi);
 	    
@@ -269,6 +364,7 @@ CollabTM::batch_infer()
 	  
 	  if (_env.use_docs) {
 	    get_xi(nu, nd, xi, xi_a, xi_b);
+	    
 	    if (y > 1) {
 	      xi_a.scale(y);
 	      xi_b.scale(y);
@@ -309,6 +405,8 @@ CollabTM::batch_infer()
     if (_iter % 10 == 0) {
       lerr("Iteration %d\n", _iter);
       approx_log_likelihood();
+      compute_likelihood(true);
+      compute_likelihood(false);
       save_model();
     }
     
@@ -685,4 +783,122 @@ CollabTM::ppc()
       break;
   }
   fclose(f);
+}
+
+void
+CollabTM::compute_likelihood(bool validation)
+{
+  assert (_env.use_docs && _env.use_ratings);
+
+  uint32_t k = 0, kzeros = 0, kones = 0;
+  double s = .0, szeros = 0, sones = 0;
+  
+  CountMap *mp = NULL;
+  FILE *ff = NULL;
+  if (validation) {
+    mp = &_validation_map;
+    ff = _vf;
+  } else {
+    mp = &_test_map;
+    ff = _tf;
+  }
+
+  for (CountMap::const_iterator i = mp->begin();
+       i != mp->end(); ++i) {
+    const Rating &e = i->first;
+    uint32_t n = e.first;
+    uint32_t m = e.second;
+
+    yval_t r = i->second;
+    double u = per_rating_likelihood(n,m,r);
+    s += u;
+    k += 1;
+  }
+
+  double a = .0;
+  info("s = %.5f\n", s);
+  fprintf(ff, "%d\t%d\t%.9f\t%d\n", _iter, duration(), s / k, k);
+  fflush(ff);
+  a = s / k;  
+  
+  if (!validation)
+    return;
+  
+  bool stop = false;
+  int why = -1;
+  if (_iter > 10) {
+    if (a > _prev_h && _prev_h != 0 && fabs((a - _prev_h) / _prev_h) < 0.00001) {
+      stop = true;
+      why = 0;
+    } else if (a < _prev_h)
+      _nh++;
+    else if (a > _prev_h)
+      _nh = 0;
+
+    if (_nh > 3) { // be robust to small fluctuations in predictive likelihood
+      why = 1;
+      stop = true;
+    }
+  }
+  _prev_h = a;
+  FILE *f = fopen(Env::file_str("/max.txt").c_str(), "w");
+  fprintf(f, "%d\t%d\t%.5f\t%d\n", 
+	  _iter, duration(), a, why);
+  fclose(f);
+  if (stop) {
+    save_model();
+    exit(0);
+  }
+}
+
+
+double
+CollabTM::per_rating_likelihood(uint32_t user, uint32_t doc, yval_t y) const
+{
+  assert (_env.use_docs && _env.use_ratings);
+
+  const double ** etheta = _theta.expected_v().const_data();
+  const double ** elogtheta = _theta.expected_logv().const_data();
+  const double ** ebeta = _beta.expected_v().const_data();
+  const double ** elogbeta = _beta.expected_logv().const_data();
+  
+  const double ** ex = _x.expected_v().const_data();
+  const double ** elogx = _x.expected_logv().const_data();
+  const double ** eepsilon = _epsilon.expected_v().const_data();
+  const double ** elogepsilon = _epsilon.expected_logv().const_data();
+  
+  const double *ea = _env.fixeda? NULL : _a.expected_v().const_data();
+  const double *eloga = _env.fixeda ? NULL : _a.expected_logv().const_data();
+
+  double s = .0;
+  for (uint32_t k = 0; k < _k; ++k) {
+    if (_env.fixeda)
+      s += (etheta[doc][k] + eepsilon[doc][k]) * ea[doc] * ex[user][k];
+    else
+      s += (etheta[doc][k] + eepsilon[doc][k]) * ex[user][k];
+  }
+    
+  if (s < 1e-30)
+    s = 1e-30;
+  info("%d, %d, s = %f, f(y) = %ld\n", p, q, s, factorial(y));
+  
+  double v = .0;
+  v = y * log(s) - s - log(factorial(y));
+  return v;
+}
+
+uint32_t
+CollabTM::factorial(uint32_t n)  const
+{ 
+  //return n <= 1 ? 1 : (n * factorial(n-1));
+  uint32_t v = 1;
+  for (uint32_t i = 2; i <= n; ++i)
+    v *= i;
+  return v;
+} 
+
+double
+CollabTM::coldstart_ratings_likelihood(uint32_t user, uint32_t doc) const
+{
+  // XXX
 }
