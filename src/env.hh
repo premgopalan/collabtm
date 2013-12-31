@@ -70,7 +70,8 @@ public:
       bool doc_only, bool ratings_only,
       bool perturb_only_beta_shape,
       bool lda, bool lda_init, bool ppc, 
-      bool seq_init, bool seq_init_samples);
+      bool seq_init, bool seq_init_samples,
+      bool fixed_doc_param);
 
   ~Env() { fclose(_plogf); }
 
@@ -124,6 +125,7 @@ public:
   bool ppc;
   bool seq_init;
   bool seq_init_samples;
+  bool fixed_doc_param;
 
   template<class T> static void plog(string s, const T &v);
   static string file_str(string fname);
@@ -220,7 +222,8 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
 	 bool use_docv, bool use_ratingsv,
 	 bool perturb_only_beta_shapev,
 	 bool ldav, bool lda_initv, bool ppcv,
-	 bool seq_initv, bool seq_init_samplesv)
+	 bool seq_initv, bool seq_init_samplesv,
+	 bool fixed_doc_param)
   : dataset(datasetv),
     ndocs(ndocs_v),
     nvocab(nvocab_v),

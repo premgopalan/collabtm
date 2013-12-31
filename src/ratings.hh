@@ -61,6 +61,9 @@ public:
   void load_movies_metadata(string dir);
   int read_test_users(FILE *f, UserMap *);
 
+  uint32_t to_movie_id(uint32_t mov_seq) const;
+  uint32_t to_user_id(uint32_t user_seq) const;
+
   string movie_type(uint32_t movie_seq) const;
   string movie_name(uint32_t movie_seq) const;
   
@@ -78,6 +81,7 @@ private:
   string movies_by_user_s() const;
   bool add_movie(uint32_t id);
   bool add_user(uint32_t id);
+
 
   SparseRatingMatrix _users2rating;
   SparseMatrix _users;
@@ -210,6 +214,23 @@ Ratings::movie_type(uint32_t movie_seq) const
   if (i != _movie_types.end())
     return i->second;
   return "";
+}
+
+inline uint32_t
+Ratings::to_user_id(uint32_t user_seq) const
+{
+  IDMap::const_iterator it = _seq2user.find(user_seq);
+  assert (it != _seq2user.end());
+  return it->second;
+}
+
+
+inline uint32_t
+Ratings::to_movie_id(uint32_t mov_seq) const
+{
+  IDMap::const_iterator it = _seq2movie.find(mov_seq);
+  assert (it != _seq2movie.end());
+  return it->second;
 }
 
 #endif

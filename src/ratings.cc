@@ -57,6 +57,12 @@ Ratings::read_generic_train(string dir)
   read_generic(f, NULL);
   fclose(f);
   Env::plog("training ratings", _nratings);
+
+  _env.nusers = _curr_user_seq;
+  _env.ndocs = _curr_movie_seq;
+
+  Env::plog("nusers = ", _env.nusers);
+  Env::plog("ndocs = ", _env.ndocs);
 }
 
 int
@@ -77,7 +83,7 @@ Ratings::read_generic(FILE *f, CountMap *cmap)
 
     IDMap::iterator it = _user2seq.find(uid);
     if (it == _user2seq.end() && !add_user(uid)) {
-      //printf("error: exceeded user limit %d, %d, %d\n",
+      //lerr("error: exceeded user limit %d, %d, %d\n",
       //uid, mid, rating);
       //fflush(stdout);
       continue;
@@ -325,7 +331,6 @@ Ratings::read_generic_docs(string dir)
       lerr("error: unexpected lines in file\n");
       fclose(f);
       lerr("docseq = %d, docid = %d, maxwid = %d\n", docseq, docid, maxwid);
-      fflush(stdout);
       _env.ndocs = _curr_movie_seq;
       Env::plog("ndocs loaded (limited by nusers)", _env.ndocs);
       return 0;
@@ -333,8 +338,11 @@ Ratings::read_generic_docs(string dir)
 
     IDMap::iterator mt = _movie2seq.find(docid);
     if (mt == _movie2seq.end() && !add_movie(docid)) {
-      lerr("error: exceeded movie limit %d\n", docid);
-      exit(-1); // the user must specify a greater number of documents
+      Env::plog("ndocs loaded (limited by ndocs)", _curr_movie_seq);
+      lerr("warning: exceeded movie limit %d\n", docid);
+      lerr("docseq = %d, docid = %d, maxwid = %d\n", docseq, docid, maxwid);
+      fclose(f);
+      return 0;
     }
     mt = _movie2seq.find(docid);
     docseq = mt->second;

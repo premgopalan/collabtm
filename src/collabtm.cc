@@ -44,15 +44,27 @@ CollabTM::initialize()
 {
   if (_env.use_docs) {
     if (_env.lda) { // fix lda topics and doc memberships
-      
+
+      // beta and theta are fixed after loading
+      assert (_env.fixed_doc_param);
+
+      _beta.set_to_prior_curr();
+      _beta.set_to_prior();
+
+      _theta.set_to_prior_curr();
+      _theta.set_to_prior();
+
       _beta.load_from_lda(_env.datfname, 0.01, _k); // eek! fixme.
       _theta.load_from_lda(_env.datfname, 0.1, _k);
       lerr("loaded lda fits");
       
     } else if (_env.lda_init) { // lda based init
       
-      _beta.initialize();
+      _beta.set_to_prior_curr();
+      _beta.set_to_prior();
+
       _theta.set_to_prior_curr();
+      _theta.set_to_prior();
       
       _beta.load_from_lda(_env.datfname, 0.01, _k); // eek! fixme.
       _theta.load_from_lda(_env.datfname, 0.1, _k);
@@ -69,18 +81,33 @@ CollabTM::initialize()
 
   if (_env.use_ratings) {
 
-    _x.initialize();
-    _epsilon.initialize();
-    _x.initialize_exp();
-    _epsilon.initialize_exp();
+    if (_env.use_docs) {
+      _x.set_to_prior();
+      _x.set_to_prior_curr();
+      
+      _epsilon.set_to_prior();
+      _epsilon.set_to_prior_curr();
 
-    if (!_env.fixeda) {
-      _a.initialize();
-      _a.compute_expectations();
+      _x.compute_expectations();
+      _epsilon.compute_expectations();
+
+      if (!_env.fixeda) {
+	_a.set_to_prior();
+	_a.set_to_prior_curr();
+	_a.compute_expectations();
+      }
+    } else {
+      _x.initialize_exp();
+      _epsilon.initialize_exp();
+      
+      if (!_env.fixeda) {
+	_a.initialize();
+	_a.compute_expectations();
+      }
     }
+    
   }
 }
-
 
 void
 CollabTM::initialize_perturb_betas()
@@ -88,6 +115,7 @@ CollabTM::initialize_perturb_betas()
   if (_env.use_docs) {
     _beta.initialize();
     _theta.set_to_prior_curr();
+    _theta.set_to_prior();
 
     _theta.compute_expectations();
     _beta.compute_expectations();
@@ -95,12 +123,15 @@ CollabTM::initialize_perturb_betas()
 
   if (_env.use_ratings) {
     _x.set_to_prior_curr();
+    _x.set_to_prior();
     _epsilon.set_to_prior_curr();
+    _epsilon.set_to_prior();
     _x.compute_expectations();
     _epsilon.compute_expectations();
 
     if (!_env.fixeda) {
       _a.set_to_prior_curr();
+      _a.set_to_prior();
       _a.compute_expectations();
     }
   }
@@ -109,13 +140,23 @@ CollabTM::initialize_perturb_betas()
 void
 CollabTM::seq_init_helper()
 {
-  _beta.set_to_prior_curr();
-  _beta.set_to_prior();
-  _beta.compute_expectations();
+  if (!_env.fixed_doc_param) {
+    _beta.set_to_prior_curr();
+    _beta.set_to_prior();
+    _beta.compute_expectations();
+    
+    _theta.set_to_prior_curr();
+    _theta.set_to_prior();
+    _theta.compute_expectations();
 
-  _theta.set_to_prior_curr();
-  _theta.set_to_prior();
-  _theta.compute_expectations();
+  } else { // load beta and theta from saved state
+
+    _beta.set_to_prior();
+    _theta.set_to_prior();
+    
+    _beta.load();
+    _theta.load();
+  }
 
   if (_env.use_ratings) {
     _x.set_to_prior_curr();
@@ -156,6 +197,7 @@ CollabTM::load_validation_and_test_sets()
   // remove them from training, test and validation
   Env::plog("test ratings before removing heldout cold start docs", _test_map.size());
   Env::plog("validation ratings before removing heldout cold start docs", _validation_map.size());
+  Env::plog("cold start docs", _env.heldout_items_ratio * _env.ndocs); 
 
   uint32_t c = 0;
   while (c < _env.heldout_items_ratio * _env.ndocs) {
@@ -166,6 +208,7 @@ CollabTM::load_validation_and_test_sets()
     if (nusers < 10)
       continue;
     _cold_start_docs[n] = true;
+    c++;
   }
   Env::plog("number of heldout cold start docs", _cold_start_docs.size());
 
@@ -173,25 +216,31 @@ CollabTM::load_validation_and_test_sets()
   while (i != _test_map.end()) {
     const Rating &r = i->first;
     MovieMap::const_iterator itr = _cold_start_docs.find(r.second);
-    if (itr != _cold_start_docs.end())
+    if (itr != _cold_start_docs.end()) {
+      lerr("test: erasing rating r (%d,%d) in heldout cold start", 
+	   _ratings.to_user_id(r.first), 
+	   _ratings.to_movie_id(r.second));
       _test_map.erase(i++);
-    else
+    } else
       ++i;
   }
   
   CountMap::iterator j = _validation_map.begin(); 
   while (j != _validation_map.end()) {
-    const Rating &r = i->first;
+    const Rating &r = j->first;
     MovieMap::const_iterator itr = _cold_start_docs.find(r.second);
-    if (itr != _cold_start_docs.end())
-      _test_map.erase(j++);
-    else
+    if (itr != _cold_start_docs.end()) {
+      lerr("validation: erasing rating r (%d,%d) in heldout cold start", 
+	   _ratings.to_user_id(r.first), 
+	   _ratings.to_movie_id(r.second));
+      _validation_map.erase(j++);
+    } else
       ++j;
   }
   Env::plog("test ratings after", _test_map.size());
   Env::plog("validation ratings after", _validation_map.size());
 
-  FILE *g = fopen("coldstart_docs.tsv", "w");
+  FILE *g = fopen(Env::file_str("/coldstart_docs.tsv").c_str(), "w");
   write_coldstart_docs(g, _cold_start_docs);
   fclose(g);
 }
@@ -268,6 +317,10 @@ CollabTM::seq_init()
   uArray s(_k);
   
   for (uint32_t nd = 0; nd < _ndocs; ++nd) {
+
+    MovieMap::const_iterator mp = _cold_start_docs.find(nd);
+    if (mp != _cold_start_docs.end() && mp->second == true)
+      continue;
     
     const WordVec *w = _ratings.get_words(nd);
     for (uint32_t nw = 0; w && nw < w->size(); nw++) {
@@ -280,7 +333,6 @@ CollabTM::seq_init()
       if (_iter == 0 || _env.seq_init_samples) {
 	gsl_ran_multinomial(_r, _k, count, phi.const_data(), s.data());
 	_beta.update_shape_curr(word, s);
-	// xxx
 	_theta.update_shape_curr(nd, s);
       }
     }
@@ -289,7 +341,6 @@ CollabTM::seq_init()
       if (nd % 100 == 0) {
 	_beta.update_rate_curr(thetasum);
 	_beta.compute_expectations();
-	// xxx
 	_theta.update_rate_curr(betasum);
 	_theta.compute_expectations();
 	lerr("done document %d", nd);
@@ -308,8 +359,10 @@ CollabTM::batch_infer()
       initialize_perturb_betas();
     else
       initialize();
-  } else
+  } else {
+    assert (_env.use_docs);
     seq_init();
+  }
   
   approx_log_likelihood();
 
@@ -321,9 +374,13 @@ CollabTM::batch_infer()
 	    
   while (1) {
     
-    if (_env.use_docs && !_env.lda) {
+    if (_env.use_docs && !_env.fixed_doc_param) {
       
       for (uint32_t nd = 0; nd < _ndocs; ++nd) {
+
+	MovieMap::const_iterator mp = _cold_start_docs.find(nd);
+	if (mp != _cold_start_docs.end() && mp->second == true)
+	  continue;
 
 	const WordVec *w = _ratings.get_words(nd);
 	for (uint32_t nw = 0; w && nw < w->size(); nw++) {
@@ -332,32 +389,27 @@ CollabTM::batch_infer()
 	  uint32_t count = p.second;
 	  
 	  get_phi(_theta, nd, _beta, word, phi);
+
+	  if (count > 1)
+	    phi.scale(count);
 	  
-	  if (_env.seq_init_samples) {
-	    
-	    // always sample from the phis
-	    gsl_ran_multinomial(_r, _k, count, phi.const_data(), s.data());
-	    _beta.update_shape_curr(word, s);
-	    
-	  } else {
-	    
-	    if (count > 1)
-	      phi.scale(count);
-	    
-	    _theta.update_shape_next(nd, phi);
-	    _beta.update_shape_next(word, phi);
-	    
-	  }
+	  _theta.update_shape_next(nd, phi);
+	  _beta.update_shape_next(word, phi);
 	}
       }
     }
     
     if (_env.use_ratings) {
       for (uint32_t nu = 0; nu < _nusers; ++nu) {
-	
+
 	const vector<uint32_t> *docs = _ratings.get_movies(nu);
 	for (uint32_t j = 0; j < docs->size(); ++j) {
 	  uint32_t nd = (*docs)[j];
+
+	  MovieMap::const_iterator mp = _cold_start_docs.find(nd);
+	  if (mp != _cold_start_docs.end() && mp->second == true)
+	    continue;
+
 	  yval_t y = _ratings.r(nu,nd);
 	  
 	  assert (y > 0);
@@ -371,7 +423,7 @@ CollabTM::batch_infer()
 	      xi.scale(y);
 	    }
 	    
-	    if (!_env.lda)
+	    if (!_env.fixed_doc_param)
 	      _theta.update_shape_next(nd, xi_a);
 	    
 	    _epsilon.update_shape_next(nd, xi_b);
@@ -421,7 +473,7 @@ CollabTM::batch_infer()
 void
 CollabTM::update_all_rates()
 {
-  if (_env.use_docs && !_env.lda) {
+  if (_env.use_docs && !_env.fixed_doc_param) {
     // update theta rate
     Array betasum(_k);
     _beta.sum_rows(betasum);
@@ -438,7 +490,7 @@ CollabTM::update_all_rates()
     Array xsum(_k);
     _x.sum_rows(xsum);
     
-    if (!_env.lda)
+    if (!_env.fixed_doc_param)
       if (!_env.fixeda)
 	_theta.update_rate_next(xsum, _a.expected_v());
       else
@@ -485,7 +537,7 @@ CollabTM::update_all_rates()
 void
 CollabTM::update_all_rates_in_seq()
 {
-  if (_env.use_docs && !_env.lda) {
+  if (_env.use_docs && !_env.fixed_doc_param) {
     // update theta rate
     Array betasum(_k);
     _beta.sum_rows(betasum);
@@ -495,19 +547,19 @@ CollabTM::update_all_rates_in_seq()
   Array xsum(_k);
   if (_env.use_ratings) {
     _x.sum_rows(xsum);
-    if (!_env.lda)
+    if (!_env.fixed_doc_param)
       if (_env.fixeda)
 	_theta.update_rate_next(xsum);
       else
 	_theta.update_rate_next(xsum, _a.expected_v());
   }
   
-  if (!_env.lda) {
+  if (!_env.fixed_doc_param) {
     _theta.swap();
     _theta.compute_expectations();
   }
 
-  if (_env.use_docs && !_env.lda) {
+  if (_env.use_docs && !_env.fixed_doc_param) {
     // update beta rate
     Array thetasum(_k);
     _theta.sum_rows(thetasum);
@@ -566,7 +618,7 @@ CollabTM::update_all_rates_in_seq()
 void
 CollabTM::swap_all()
 {
-  if (_env.use_docs && !_env.lda) {
+  if (_env.use_docs && !_env.fixed_doc_param) {
     _theta.swap();
     _beta.swap();
   }
@@ -581,7 +633,7 @@ CollabTM::swap_all()
 void
 CollabTM::compute_all_expectations()
 {
-  if (_env.use_docs && !_env.lda) { 
+  if (_env.use_docs && !_env.fixed_doc_param) { 
     _theta.compute_expectations();
     _beta.compute_expectations();
   }
@@ -872,7 +924,7 @@ CollabTM::per_rating_likelihood(uint32_t user, uint32_t doc, yval_t y) const
 
   double s = .0;
   for (uint32_t k = 0; k < _k; ++k) {
-    if (_env.fixeda)
+    if (!_env.fixeda)
       s += (etheta[doc][k] + eepsilon[doc][k]) * ea[doc] * ex[user][k];
     else
       s += (etheta[doc][k] + eepsilon[doc][k]) * ex[user][k];

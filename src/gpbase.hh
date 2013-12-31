@@ -485,7 +485,7 @@ GPMatrixGR::compute_expectations()
 inline void
 GPMatrixGR::sum_rows(Array &v)
 {
-  double **ev = _Ev.data();
+  const double **ev = _Ev.const_data();
   for (uint32_t i = 0; i < _n; ++i)
     for (uint32_t k = 0; k < _k; ++k)
       v[k] += ev[i][k];
@@ -599,6 +599,8 @@ GPMatrixGR::load()
   _scurr.load(shape_fname);
   _rcurr.load(rate_fname);
   compute_expectations();
+  lerr("loaded from %s and %s", 
+       shape_fname.c_str(), rate_fname.c_str());
 }
 
 inline void
