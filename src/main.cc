@@ -85,6 +85,7 @@ main(int argc, char **argv)
   bool seq_init = false;
   bool seq_init_samples = false;
   bool fixed_doc_param = false;
+  bool phased = false;
 
   uint32_t i = 0;
   while (i <= argc - 1) {
@@ -188,6 +189,8 @@ main(int argc, char **argv)
       seq_init_samples = true;
     } else if (strcmp(argv[i], "-fixed-doc-param") == 0) {
       fixed_doc_param = true;
+    } else if (strcmp(argv[i], "-phased") == 0) {
+      phased = true;
     } else if (i > 0) {
       fprintf(stdout,  "error: unknown option %s\n", argv[i]);
       assert(0);
@@ -204,8 +207,8 @@ main(int argc, char **argv)
 	  fixeda, vbinit, vbinit_iterations,
 	  use_docs, use_ratings, perturb_only_beta_shape,
 	  lda, lda_init, ppc, seq_init, seq_init_samples,
-	  fixed_doc_param);
-
+	  fixed_doc_param, phased);
+  
   env_global = &env;
   if (p) {
     postprocess(env);

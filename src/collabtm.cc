@@ -217,9 +217,9 @@ CollabTM::load_validation_and_test_sets()
     const Rating &r = i->first;
     MovieMap::const_iterator itr = _cold_start_docs.find(r.second);
     if (itr != _cold_start_docs.end()) {
-      lerr("test: erasing rating r (%d,%d) in heldout cold start", 
-	   _ratings.to_user_id(r.first), 
-	   _ratings.to_movie_id(r.second));
+      debug("test: erasing rating r (%d,%d) in heldout cold start", 
+	    _ratings.to_user_id(r.first), 
+	    _ratings.to_movie_id(r.second));
       _test_map.erase(i++);
     } else
       ++i;
@@ -230,9 +230,9 @@ CollabTM::load_validation_and_test_sets()
     const Rating &r = j->first;
     MovieMap::const_iterator itr = _cold_start_docs.find(r.second);
     if (itr != _cold_start_docs.end()) {
-      lerr("validation: erasing rating r (%d,%d) in heldout cold start", 
-	   _ratings.to_user_id(r.first), 
-	   _ratings.to_movie_id(r.second));
+      debug("validation: erasing rating r (%d,%d) in heldout cold start", 
+	    _ratings.to_user_id(r.first), 
+	    _ratings.to_movie_id(r.second));
       _validation_map.erase(j++);
     } else
       ++j;
@@ -373,6 +373,16 @@ CollabTM::batch_infer()
   uArray s(_k);
 	    
   while (1) {
+    if (_env.phased)
+      if (_iter < 200) {
+	_env.fixed_doc_param = false;
+	_env.use_docs = true;
+	_env.use_ratings = false;
+      } else if (_iter > 200) {
+	_env.fixed_doc_param = true;
+	_env.use_docs = true;
+	_env.use_ratings = true;
+      }
     
     if (_env.use_docs && !_env.fixed_doc_param) {
       
@@ -457,8 +467,10 @@ CollabTM::batch_infer()
     if (_iter % 10 == 0) {
       lerr("Iteration %d\n", _iter);
       approx_log_likelihood();
-      compute_likelihood(true);
-      compute_likelihood(false);
+      if (_env.use_ratings) {
+	compute_likelihood(true);
+	compute_likelihood(false);
+      }
       save_model();
     }
     
@@ -840,7 +852,7 @@ CollabTM::ppc()
 void
 CollabTM::compute_likelihood(bool validation)
 {
-  assert (_env.use_docs && _env.use_ratings);
+  assert (_env.use_ratings);
 
   uint32_t k = 0, kzeros = 0, kones = 0;
   double s = .0, szeros = 0, sones = 0;
@@ -907,7 +919,7 @@ CollabTM::compute_likelihood(bool validation)
 double
 CollabTM::per_rating_likelihood(uint32_t user, uint32_t doc, yval_t y) const
 {
-  assert (_env.use_docs && _env.use_ratings);
+  assert (_env.use_ratings);
 
   const double ** etheta = _theta.expected_v().const_data();
   const double ** elogtheta = _theta.expected_logv().const_data();
