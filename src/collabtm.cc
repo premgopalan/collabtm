@@ -947,7 +947,7 @@ CollabTM::per_rating_likelihood(uint32_t user, uint32_t doc, yval_t y) const
   info("%d, %d, s = %f, f(y) = %ld\n", p, q, s, factorial(y));
   
   double v = .0;
-  v = y * log(s) - s - log(factorial(y));
+  v = y * log(s) - s - log_factorial(y);
   return v;
 }
 
@@ -958,6 +958,16 @@ CollabTM::factorial(uint32_t n)  const
   uint32_t v = 1;
   for (uint32_t i = 2; i <= n; ++i)
     v *= i;
+  return v;
+} 
+
+double
+CollabTM::log_factorial(uint32_t n)  const
+{ 
+  //return n <= 1 ? 1 : (n * factorial(n-1));
+  double v = log(1);
+  for (uint32_t i = 2; i <= n; ++i)
+    v += log(i);
   return v;
 } 
 

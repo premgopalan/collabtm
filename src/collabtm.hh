@@ -44,6 +44,7 @@ private:
   uint32_t duration() const;
   bool rating_ok(const Rating &r) const;
   uint32_t factorial(uint32_t n)  const;
+  double log_factorial(uint32_t n)  const;
 
   Env &_env;
   Ratings &_ratings;
