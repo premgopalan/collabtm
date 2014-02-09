@@ -60,6 +60,7 @@ public:
   int read_generic(FILE *f, CountMap *m);
   void load_movies_metadata(string dir);
   int read_test_users(FILE *f, UserMap *);
+  int read_nyt_train(FILE *f, CountMap *cmap);
 
   uint32_t to_movie_id(uint32_t mov_seq) const;
   uint32_t to_user_id(uint32_t user_seq) const;

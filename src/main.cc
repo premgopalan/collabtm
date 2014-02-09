@@ -156,6 +156,8 @@ main(int argc, char **argv)
       dataset = Env::MOVIELENS;
     } else if (strcmp(argv[i], "-echonest") == 0) {
       dataset = Env::ECHONEST;
+    } else if (strcmp(argv[i], "-nyt") == 0) {
+      dataset = Env::NYT;
     } else if (strcmp(argv[i], "-binary-data") == 0) {
       binary_data = true;
     } else if (strcmp(argv[i], "-explore") == 0) {

@@ -182,13 +182,19 @@ CollabTM::load_validation_and_test_sets()
   sprintf(buf, "%s/validation.tsv", _env.datfname.c_str());
   FILE *validf = fopen(buf, "r");
   assert(validf);
-  _ratings.read_generic(validf, &_validation_map);
+  if (_env.dataset == Env::NYT)
+    _ratings.read_nyt_train(validf, &_validation_map);
+  else
+    _ratings.read_generic(validf, &_validation_map);
   fclose(validf);
 
   sprintf(buf, "%s/test.tsv", _env.datfname.c_str());
   FILE *testf = fopen(buf, "r");
   assert(testf);
-  _ratings.read_generic(testf, &_test_map);
+  if (_env.dataset == Env::NYT)
+    _ratings.read_nyt_train(validf, &_test_map);
+  else
+    _ratings.read_generic(testf, &_test_map);
   fclose(testf);
   printf("+ loaded validation and test sets from %s\n", _env.datfname.c_str());
   fflush(stdout);

@@ -55,7 +55,7 @@ typedef std::map<uint32_t, string> StrMapInv;
 
 class Env {
 public:
-  typedef enum { NETFLIX, MOVIELENS, MENDELEY, ECHONEST } Dataset;
+  typedef enum { NETFLIX, MOVIELENS, MENDELEY, ECHONEST, NYT } Dataset;
   typedef enum { CREATE_TRAIN_TEST_SETS, TRAINING } Mode;
 
   Env(uint32_t ndocs_v, uint32_t nvocab_v,
