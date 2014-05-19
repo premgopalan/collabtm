@@ -6,6 +6,12 @@ CollabTM::CollabTM(Env &env, Ratings &ratings)
     _ndocs(env.ndocs),
     _nvocab(env.nvocab),
     _k(env.k),
+    _rhou(_nusers),
+    _rhow(_nvocab),
+    _tau0(1024), _kappa(.5),
+    _userc(_nusers),
+    _wordc(_nvocab),
+
     _iter(0),
     _start_time(time(0)),
     _theta("theta", 0.3, 0.3, _ndocs,_k,&_r),
@@ -534,7 +540,274 @@ CollabTM::batch_infer()
   }
 }
 
+void 
+CollabTM::online_infer()
+{
+    //     - We sample items. 
+    //         - theta, epsilon, a all get completely updated each time. 
+    //         - x and beta do not 
+    //         - this simplifies book keeping around the learning rate (vs. sampling users)
 
+    if (!_env.seq_init && !_env.seq_init_samples) {
+        if (_env.perturb_only_beta_shape) {
+            printf("not implemented\n"); 
+            assert(false); 
+            initialize_perturb_betas();
+            printf("init perturb betas\n"); 
+        } else { 
+            printf("init normal\n"); 
+            initialize();
+        }
+    } else {
+        printf("sequential init\n"); 
+        assert (_env.use_docs);
+        seq_init();
+    }
+
+    approx_log_likelihood();
+
+    if(_env.mini_batch_size > _env.ndocs) { 
+        _env.mini_batch_size = _env.ndocs; // TODO: do we deal correctly larger batch sizes? 
+        printf("using mini-batch sizes of %d\n", _env.mini_batch_size); 
+    } 
+
+    Array phi(_k);
+    Array xi(2*_k);
+    Array xi_a(_k);
+    Array xi_b(_k);
+    UserMap sampled_words; 
+
+    //double sbefore, safter; 
+
+    //_x.set_to_zero_curr(); 
+    bool sample_all = false; 
+
+    while (1) {
+
+        if(_env.use_ratings) 
+            _x.set_to_zero(); 
+        if(_env.use_docs) 
+            _beta.set_to_zero(); 
+
+        _sampled_users.clear();
+        _sampled_movies.clear();
+        sampled_words.clear(); 
+        do {
+            uint32_t m = gsl_rng_uniform_int(_r, _ndocs);
+
+            MovieMap::const_iterator itr = _sampled_movies.find(m);
+            if (itr == _sampled_movies.end()) {
+                _sampled_movies[m] = true;
+                //printf("sampled movie %d\n", m); 
+                //_ratings.seq2movie();
+                IDMap::const_iterator idt = _ratings.seq2movie().find(m);
+                #if 0 
+                if (idt != _ratings.seq2movie().end()) 
+                  fprintf(_sm, "%d\n", idt->second); 
+                else
+                  fprintf(_sm, "unknown\n");
+                #endif 
+
+                const vector<uint32_t> *users = _ratings.get_users(m);
+                for (uint32_t i = 0; i < users->size(); ++i) {
+                    uint32_t n = (*users)[i];
+                    _sampled_users[n] = true;
+                }
+            }
+        } while ( (!sample_all && _sampled_movies.size() < _env.mini_batch_size) || (sample_all && _sampled_movies.size() < _ndocs) );
+        lerr("sampled %d users and %d movies", _sampled_users.size(), _sampled_movies.size());
+        if (sample_all)
+            printf("sampled %d\n", _sampled_movies.size()); 
+
+        //printf("before\t"); 
+        //sbefore = approx_log_likelihood_stochastic(); 
+        
+        if (_env.use_docs && !_env.fixed_doc_param) {
+
+            // local step (update phi's)
+            for (MovieMap::const_iterator itr = _sampled_movies.begin();
+                 itr != _sampled_movies.end(); ++itr) { 
+
+                uint32_t nd = itr->first;
+
+                const WordVec *w = _ratings.get_words(nd);
+                for (uint32_t nw = 0; w && nw < w->size(); nw++) {
+                    WordCount p = (*w)[nw];
+                    uint32_t word = p.first;
+                    uint32_t count = p.second;
+                    sampled_words[word] = true; 
+
+                    get_phi(_theta, nd, _beta, word, phi);
+
+                    if (count > 1)
+                        phi.scale(count);
+
+                    _theta.update_shape_next(nd, phi);
+                    _beta.update_shape_next(word, phi);
+                }
+            }
+        }
+
+        if (_env.use_ratings) {
+            for (MovieMap::const_iterator itr = _sampled_movies.begin();
+                itr != _sampled_movies.end(); ++itr) { 
+
+                uint32_t nd = itr->first;
+
+                const vector<uint32_t> *users = _ratings.get_users(nd);
+                for (uint32_t i = 0; i < users->size(); ++i) {
+                    uint32_t nu = (*users)[i];
+                    yval_t y = _ratings.r(nu,nd);
+                    assert (y > 0);
+
+                    if (_env.use_docs) {
+                        get_xi(nu, nd, xi, xi_a, xi_b);
+
+                        if (y > 1) {
+                            xi_a.scale(y);
+                            xi_b.scale(y);
+                            xi.scale(y);
+                        }
+
+                        if (!_env.fixed_doc_param)
+                            _theta.update_shape_next(nd, xi_a);
+                        _epsilon.update_shape_next(nd, xi_b);
+                        _x.update_shape_next(nu, xi_a);
+                        _x.update_shape_next(nu, xi_b);
+
+                        if (!_env.fixeda)
+                            _a.update_shape_next(nd, y); // since \sum_k \xi_k = 1
+
+                    } else { // ratings only
+
+                        get_phi(_x, nu, _epsilon, nd, phi);
+                        if (y > 1)
+                            phi.scale(y);
+
+                        _x.update_shape_next(nu, phi);
+                        _epsilon.update_shape_next(nd, phi);
+                    }
+                }
+            }
+        }
+
+        if (_env.vb || (_env.vbinit && _iter < _env.vbinit_iter))
+            stochastic_update_all_rates_in_seq(sampled_words);
+        else {
+            printf("not implemented\n"); 
+            assert(false); 
+        }
+
+        double scale_docs = _env.ndocs / _sampled_movies.size(); // TODO: is this correct?
+        //scale_docs = 0.0; 
+        //printf("scale_docs %f\n", scale_docs); 
+
+        if (_env.use_ratings) { 
+            bool rate_has_been_updated = false; 
+            for (UserMap::const_iterator itr = _sampled_users.begin();
+                    itr != _sampled_users.end(); ++itr) { 
+                uint32_t nu = itr->first;
+                if (_env.vb || (_env.vbinit && _iter < _env.vbinit_iter)) {
+
+                    Array scurr(_k), rcurr(_k);
+                    _rhou[nu] = pow(_tau0 + _userc[nu], - _kappa);
+
+                    for (uint32_t k = 0; k < _k; ++k) {
+                        scurr[k] = (1 - _rhou[nu]) * _x.shape_curr().const_data()[nu][k] +	
+                                       _rhou[nu] * (_x.sprior() + scale_docs * _x.shape_next().const_data()[nu][k]);
+                        if(!rate_has_been_updated)  { 
+                            rcurr[k] = (1 - _rhou[nu]) * _x.rate_curr().const_data()[k] +	
+                                           _rhou[nu] * (_x.rprior() + scale_docs * _x.rate_next().const_data()[k]);
+                        }
+                   }
+                   _x.set_shape_curr(nu, scurr); 
+                   if(!rate_has_been_updated) { // rate is shared across all users
+                       _x.set_rate_curr(rcurr); 
+                       rate_has_been_updated = true; 
+                   }
+                } else {
+                    // TODO: implement non-vb
+                    printf("not implemented\n"); 
+                    assert(false);
+                }
+                ++(_userc[nu]);
+            }
+            _x.compute_expectations(); 
+        }
+
+        if (_env.use_docs && !_env.fixed_doc_param) {
+
+            bool rate_has_been_updated = false; 
+            for (UserMap::const_iterator itr = sampled_words.begin();
+                    itr != sampled_words.end(); ++itr) {
+                uint32_t nw = itr->first;
+                if (_env.vb || (_env.vbinit && _iter < _env.vbinit_iter)) {
+                    Array scurr(_k), rcurr(_k);
+                    _rhow[nw] = pow(_tau0 + _wordc[nw], - _kappa);
+
+                    for (uint32_t k = 0; k < _k; ++k) {
+                        scurr[k] = (1 - _rhow[nw]) * _beta.shape_curr().const_data()[nw][k] +	
+                                       _rhow[nw] * (_beta.sprior() + scale_docs * _beta.shape_next().const_data()[nw][k]);
+                        if(!rate_has_been_updated)  { 
+                            rcurr[k] = (1 - _rhow[nw]) * _beta.rate_curr().const_data()[k] +	
+                                           _rhow[nw] * (_beta.rprior() + scale_docs * _beta.rate_next().const_data()[k]);
+                        }
+                   }
+                   _beta.set_shape_curr(nw, scurr); 
+                   if(!rate_has_been_updated) { // rate is shared across all words
+                       _beta.set_rate_curr(rcurr); 
+                       rate_has_been_updated = true; 
+                   }
+                } else
+                    assert(false); 
+                ++(_wordc[nw]);
+            }
+            _beta.compute_expectations(); 
+        }
+
+
+
+        if (_iter % 10 == 0 || _iter+1 >= _env.max_iterations) {
+            lerr("Iteration %d\n", _iter);
+            approx_log_likelihood();
+            if (_env.use_ratings) {
+                if (!sample_all) { 
+                    compute_likelihood(false);
+                    if (!compute_likelihood(true)) { 
+                        sample_all = true; 
+                        printf("sampling all documents\n"); 
+                    }
+                } else {
+                    save_model();
+                    exit(0); 
+                }
+            }
+            if (_iter % 50 == 0 || _iter+1 >= _env.max_iterations) 
+                save_model();
+        }
+        if (_env.save_state_now) { 
+            if (sample_all)
+                exit(0);
+            else
+                sample_all = true; 
+        } 
+
+        if (!sample_all)
+            ++_iter;
+        approx_log_likelihood();
+
+        if(_iter >= _env.max_iterations) { 
+            if (sample_all) { 
+                printf("DONE (%d iterations)\n", _iter); 
+                exit(0); 
+            } else
+                sample_all = true; 
+        }
+
+        //printf("after\t"); safter = approx_log_likelihood_stochastic(); 
+        //if(safter < sbefore) assert(false); 
+    }
+}
 void
 CollabTM::update_all_rates()
 {
@@ -598,6 +871,106 @@ CollabTM::update_all_rates()
     }
   }
 }
+
+void
+CollabTM::stochastic_update_all_rates_in_seq(UserMap &sampled_words)
+{
+
+  Array ta(_ndocs);
+  ta.set_elements(1); 
+
+  Array &a_ev = _a.expected_v();
+  const double *a_evd = a_ev.const_data();
+
+  if (!_env.fixeda) 
+      for (int i=0; i < _ndocs; ++i)
+          ta[i] *= a_evd[i]; 
+
+  if (_env.use_docs && !_env.fixed_doc_param) {
+    // update theta rate
+    Array betasum(_k);
+    _beta.sum_rows(betasum, sampled_words);
+    _theta.update_rate_next(betasum);
+  }
+  
+
+  Array xsum(_k);
+  if (_env.use_ratings) {
+    _x.sum_rows(xsum, _sampled_users);
+    if (!_env.fixed_doc_param) {
+          if (_env.fixeda)
+            _theta.update_rate_next(xsum, ta);
+          else
+            _theta.update_rate_next(xsum, _a.expected_v());
+    }
+  }
+  
+  if (!_env.fixed_doc_param) {
+     _theta.update_curr(_sampled_movies);
+     _theta.compute_expectations();
+  }
+
+  if (_env.use_docs && !_env.fixed_doc_param) {
+    // update beta rate
+    Array thetasum(_k);
+    _theta.sum_rows(thetasum, _sampled_movies);
+    _beta.update_rate_next(thetasum);
+
+    //_beta.update_curr(sampled_words); 
+    //_beta.compute_expectations();
+  }
+ 
+    if (_env.use_ratings) {
+    // update x rate
+    Array scaledthetasum(_k);
+    if (!_env.fixeda)
+        _theta.scaled_sum_rows(scaledthetasum, _a.expected_v(), _sampled_movies);
+    else
+        _theta.sum_rows(scaledthetasum, _sampled_movies);
+    
+    Array scaledepsilonsum(_k);
+    if (!_env.fixeda)
+      _epsilon.scaled_sum_rows(scaledepsilonsum, _a.expected_v(), _sampled_movies);
+    else
+      _epsilon.sum_rows(scaledepsilonsum, _sampled_movies);
+    
+    _x.update_rate_next(scaledthetasum);
+    _x.update_rate_next(scaledepsilonsum);
+
+    //_x.swap();
+    //_x.compute_expectations();
+    
+    // update epsilon rate
+    if (_env.fixeda)
+      _epsilon.update_rate_next(xsum);
+    else
+      _epsilon.update_rate_next(xsum, _a.expected_v());
+    
+    _epsilon.update_curr(_sampled_movies);
+    _epsilon.compute_expectations();
+ 
+    if (!_env.fixeda) {
+      // update 'a' rate
+      Array arate(_ndocs);
+      Matrix &theta_ev = _theta.expected_v();
+      const double **theta_evd = theta_ev.const_data();
+      Matrix &epsilon_ev = _epsilon.expected_v();
+      const double **epsilon_evd = epsilon_ev.const_data();
+      uint32_t nd; 
+      for (UserMap::const_iterator itr = _sampled_movies.begin();
+              itr != _sampled_movies.end(); ++itr) { 
+          nd = itr->first; 
+          for (uint32_t k = 0; k < _k; ++k)
+            arate[nd] += xsum[k] * (theta_evd[nd][k] + epsilon_evd[nd][k]);
+      }
+      _a.update_rate_next(arate);
+
+      _a.update_curr(_sampled_movies);
+      _a.compute_expectations();
+    }
+  }
+}
+
 
 void
 CollabTM::update_all_rates_in_seq()

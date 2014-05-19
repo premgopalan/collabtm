@@ -226,7 +226,12 @@ main(int argc, char **argv)
   
   if (!ppc) {
     CollabTM collabtm(env, ratings);
-    collabtm.batch_infer();
+    if (batch) { 
+        collabtm.batch_infer();
+    } else {
+        collabtm.online_infer(); // stochastic inference
+    }
+
   } else {
     CollabTM collabtm(env, ratings);
     collabtm.ppc();

@@ -101,9 +101,12 @@ public:
   void update_rate_curr(const Array &u);
 
   void swap();
+  void update_curr(const UserMap &w);
   void compute_expectations();
   void sum_rows(Array &v);
+  void sum_rows(Array &v, const UserMap &w);
   void scaled_sum_rows(Array &v, const Array &scale);
+  void scaled_sum_rows(Array &v, const Array &scale, const UserMap &w);
   void initialize();
   void initialize_exp();
   void save_state(const IDMap &m) const;
@@ -194,6 +197,21 @@ GPMatrix::swap()
 }
 
 inline void
+GPMatrix::update_curr(const UserMap &w)
+{
+  uint32_t i;
+  const double ** const sd = _snext.const_data();  
+  const double ** const rd = _rnext.const_data();  
+  for (UserMap::const_iterator itr = w.begin();
+       itr != w.end(); ++itr) { 
+     i = itr->first; 
+    _scurr.copy_to_slice(i, sd[i]);
+    _rcurr.copy_to_slice(i, rd[i]);
+  }
+  set_to_prior();
+}
+
+inline void
 GPMatrix::compute_expectations()
 {
   const double ** const ad = _scurr.const_data();
@@ -219,6 +237,19 @@ GPMatrix::sum_rows(Array &v)
 }
 
 inline void
+GPMatrix::sum_rows(Array &v, const UserMap &w)
+{
+  const double **ev = _Ev.const_data();
+  uint32_t i; 
+  for (UserMap::const_iterator itr = w.begin();
+       itr != w.end(); ++itr) { 
+    i = itr->first; 
+    for (uint32_t k = 0; k < _k; ++k)
+      v[k] += ev[i][k];
+  }
+}
+
+inline void
 GPMatrix::scaled_sum_rows(Array &v, const Array &scale)
 {
   assert(scale.size() == n() && v.size() == k());
@@ -226,6 +257,20 @@ GPMatrix::scaled_sum_rows(Array &v, const Array &scale)
   for (uint32_t i = 0; i < _n; ++i)
     for (uint32_t k = 0; k < _k; ++k)
       v[k] += ev[i][k] * scale[i];
+}
+
+inline void
+GPMatrix::scaled_sum_rows(Array &v, const Array &scale, const UserMap &w)
+{
+  assert(scale.size() == n() && v.size() == k());
+  const double **ev = _Ev.const_data();
+  uint32_t i; 
+  for (UserMap::const_iterator itr = w.begin();
+       itr != w.end(); ++itr) { 
+    i = itr->first; 
+    for (uint32_t k = 0; k < _k; ++k)
+      v[k] += ev[i][k] * scale[i];
+  }
 }
 
 inline void
@@ -374,16 +419,20 @@ public:
 
   void set_to_prior();
   void set_to_prior_curr();
+  void set_to_zero();
   void update_shape_next(const Array &phi);
   void update_shape_next(uint32_t n, const Array &sphi);
   void update_shape_next(uint32_t n, const uArray &sphi);
   void update_shape_curr(uint32_t n, const uArray &sphi);
+  void set_shape_curr(uint32_t n, const Array &phi); 
 
   void update_rate_next(const Array &u);
   void update_rate_curr(const Array &u);
+  void set_rate_curr(const Array &u); 
   void swap();
   void compute_expectations();
   void sum_rows(Array &v);
+  void sum_rows(Array &v, const UserMap &w); 
   void scaled_sum_rows(Array &v, const Array &scale);
   void initialize();
   void initialize_exp();
@@ -423,6 +472,13 @@ GPMatrixGR::set_to_prior_curr()
 }
 
 inline void
+GPMatrixGR::set_to_zero()
+{
+  _snext.set_elements(.0);
+  _rnext.set_elements(.0);
+}
+
+inline void
 GPMatrixGR::update_shape_next(uint32_t n, const Array &sphi)
 {
   _snext.add_slice(n, sphi);
@@ -452,6 +508,19 @@ GPMatrixGR::update_rate_curr(const Array &u)
 {
   _rcurr += u;
 }
+
+inline void 
+GPMatrixGR::set_shape_curr(uint32_t n, const Array &phi) 
+{
+    _scurr.set_elements(n, phi);
+}
+
+inline void 
+GPMatrixGR::set_rate_curr(const Array &u)
+{  
+  _rcurr = u;
+}
+
 
 inline void
 GPMatrixGR::swap()
@@ -491,6 +560,18 @@ GPMatrixGR::sum_rows(Array &v)
       v[k] += ev[i][k];
 }
 
+inline void
+GPMatrixGR::sum_rows(Array &v, const UserMap &w)
+{
+  const double **ev = _Ev.const_data();
+  uint32_t i; 
+  for (UserMap::const_iterator itr = w.begin();
+       itr != w.end(); ++itr) { 
+    i = itr->first; 
+    for (uint32_t k = 0; k < _k; ++k)
+      v[k] += ev[i][k];
+  }
+}
 
 inline void
 GPMatrixGR::scaled_sum_rows(Array &v, const Array &scale)
@@ -670,6 +751,7 @@ public:
   void update_rate_next(const Array &v);
   void update_rate_next(uint32_t n, double v);
   void swap();
+  void update_curr(const UserMap &w);
   void compute_expectations();
   void initialize();
   void initialize_exp();
@@ -731,6 +813,19 @@ GPArray::swap()
   _scurr.swap(_snext);
   _rcurr.swap(_rnext);
   set_to_prior();
+}
+
+inline void
+GPArray::update_curr(const UserMap &w)
+{
+  uint32_t i;
+  for (UserMap::const_iterator itr = w.begin();
+       itr != w.end(); ++itr) { 
+     i = itr->first; 
+     _scurr[i] = _snext[i];
+     _rcurr[i] = _rnext[i];
+  }
+  set_to_prior(); 
 }
 
 inline void

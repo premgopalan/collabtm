@@ -11,6 +11,7 @@ public:
   ~CollabTM() { fclose(_af); }
   
   void batch_infer();
+  void online_infer(); 
   void gen_ranking_for_users(); 
   void ppc();
 
@@ -28,6 +29,7 @@ private:
 	      Array &x_b);
   void update_all_rates();
   void update_all_rates_in_seq();
+  void stochastic_update_all_rates_in_seq(UserMap &sampled_words); 
   void swap_all();
   void compute_all_expectations();
   void save_model();
@@ -59,6 +61,9 @@ private:
   
   uint32_t _k;
   uint32_t _iter;
+  Array _rhou, _rhow;
+  double _tau0, _kappa;
+  uArray _userc, _wordc;
 
   GPMatrix _theta;
   GPMatrixGR _beta;
@@ -82,6 +87,7 @@ private:
   CountMap _test_map;
   MovieMap _cold_start_docs;
   UserMap _sampled_users;
+  UserMap _sampled_movies;
 
 };
 

@@ -85,6 +85,7 @@ public:
   uint32_t nvocab;
   uint32_t nusers;
   uint32_t k;
+  uint32_t mini_batch_size; 
 
   double alpha;
   double tau0;
@@ -251,6 +252,7 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
     ground_truth_fname(gfname),
     model_load(load),
     model_location(loc),
+    mini_batch_size(1024),
     gen_heldout(gen_hout),
     online_iterations(1),
     meanchangethresh(0.001),
