@@ -24,6 +24,7 @@ typedef D2Array<double> Matrix;
 typedef D3Array<double> D3;
 typedef D2Array<KV> MatrixKV;
 typedef D1Array<KV> KVArray;
+typedef D1Array<KVI> KVIArray;
 
 typedef std::map<uint32_t, yval_t> RatingMap;
 typedef std::map<uint32_t, uint16_t> WordMap;

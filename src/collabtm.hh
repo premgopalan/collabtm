@@ -11,12 +11,14 @@ public:
   ~CollabTM() { fclose(_af); }
   
   void batch_infer();
+  void gen_ranking_for_users(); 
   void ppc();
 
 private:
   void initialize();
   void initialize_perturb_betas();
   void approx_log_likelihood();
+  void precision(); 
   void get_phi(GPBase<Matrix> &a, uint32_t ai, 
 	       GPBase<Matrix> &b, uint32_t bi, 
 	       Array &phi);
@@ -38,8 +40,10 @@ private:
   void save_user_state(string s, const Matrix &mat);
   void save_item_state(string s, const Matrix &mat);
   void save_state(string s, const Array &mat);
-  void compute_likelihood(bool validation);
+  bool compute_likelihood(bool validation);
   double per_rating_likelihood(uint32_t user, uint32_t doc, yval_t y) const;
+  double per_rating_prediction(uint32_t user, uint32_t doc) const;
+
   double coldstart_ratings_likelihood(uint32_t user, uint32_t doc) const;
   uint32_t duration() const;
   bool rating_ok(const Rating &r) const;
@@ -67,12 +71,18 @@ private:
   FILE *_af;
   FILE *_vf;
   FILE *_tf;
+  FILE *_pf;
+  FILE *_df;
   double _prev_h;
   uint32_t _nh;
+  bool _save_ranking_file;
+  uint32_t _topN_by_user;
 
   CountMap _validation_map;  
   CountMap _test_map;
   MovieMap _cold_start_docs;
+  UserMap _sampled_users;
+
 };
 
 inline uint32_t

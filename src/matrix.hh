@@ -18,6 +18,7 @@
 
 #define SQR(x) (x * x)
 
+typedef std::pair<uint32_t, uint32_t> KVI; // second uint32_t should be yval_t
 typedef std::pair<uint32_t, double> KV;
 class Rating: public std::pair<uint32_t, uint32_t> {
 public:
@@ -44,6 +45,7 @@ using namespace std;
 static int cmpdouble(const void *p1, const void *p2);
 static int cmpuint32(const void *p1, const void *p2);
 static int cmppairval(const void *p1, const void *p2);
+static int cmppairintval(const void *p1, const void *p2);
 static int cmppairedgeval(const void *p1, const void *p2);
 
 template <class T>
@@ -255,6 +257,12 @@ D1Array<KV>::sort_by_value()
 }
 
 template<> inline void 
+D1Array<KVI>::sort_by_value()
+{
+  qsort(_data, _n, sizeof(KVI), cmppairintval);
+}
+
+template<> inline void 
 D1Array<RatingV>::sort_by_value()
 {
   qsort(_data, _n, sizeof(RatingV), cmppairedgeval);
@@ -281,6 +289,14 @@ cmppairval(const void *p1, const void *p2)
 {
   const KV &u = *(const KV *)p1;
   const KV &v = *(const KV *)p2;
+  return u.second < v.second;
+}
+
+static int
+cmppairintval(const void *p1, const void *p2)
+{
+  const KVI &u = *(const KVI *)p1;
+  const KVI &v = *(const KVI *)p2;
   return u.second < v.second;
 }
 

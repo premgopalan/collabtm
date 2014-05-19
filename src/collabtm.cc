@@ -13,7 +13,9 @@ CollabTM::CollabTM(Env &env, Ratings &ratings)
     _x("x", 0.3, 0.3, _nusers,_k,&_r),
     _epsilon("epsilon", 0.3, 0.3, _ndocs,_k,&_r),
     _a("a", 0.3, 0.3, _ndocs, &_r),
-    _prev_h(.0), _nh(0)
+    _prev_h(.0), _nh(0),
+    _save_ranking_file(false),
+    _topN_by_user(100)
 {
   gsl_rng_env_setup();
   const gsl_rng_type *T = gsl_rng_default;
@@ -34,6 +36,16 @@ CollabTM::CollabTM(Env &env, Ratings &ratings)
   _tf = fopen(Env::file_str("/test.txt").c_str(), "w");
   if (!_tf)  {
     printf("cannot open heldout file:%s\n",  strerror(errno));
+    exit(-1);
+  }
+  _pf = fopen(Env::file_str("/precision.txt").c_str(), "w");
+  if (!_pf)  {
+    printf("cannot open logl file:%s\n",  strerror(errno));
+    exit(-1);
+  }
+  _df = fopen(Env::file_str("/ndcg.txt").c_str(), "w");
+  if (!_df)  {
+    printf("cannot open logl file:%s\n",  strerror(errno));
     exit(-1);
   }
   load_validation_and_test_sets();
@@ -263,6 +275,41 @@ CollabTM::write_coldstart_docs(FILE *f, MovieMap &mp)
   fflush(f);
 }
 
+void 
+CollabTM::gen_ranking_for_users()
+{
+    // load rating prediction parameters
+    printf("loading theta: "); fflush(stdout);
+    _theta.load();
+    printf("done\n");
+    printf("loading epsilon: "); fflush(stdout);
+    _epsilon.load();
+    printf("done\n"); 
+    printf("loading x: "); fflush(stdout);
+    _x.load();
+    printf("done\n"); 
+
+    // load test users 
+    char buf[4096];
+    sprintf(buf, "%s/test_users.tsv", _env.datfname.c_str());
+    FILE *f = fopen(buf, "r");
+    assert(f);
+    _ratings.read_test_users(f, &_sampled_users);
+    fclose(f);
+ 
+    // get and output rankings
+    _save_ranking_file = true;
+    precision();
+    printf("DONE writing ranking.tsv in output directory\n");
+
+    // get and output likelihood
+    bool validation=false;
+    bool experiment=true;
+    if(!compute_likelihood(validation)) {
+        save_model();
+        exit(0);
+    }
+}
 
 void
 CollabTM::get_phi(GPBase<Matrix> &a, uint32_t ai, 
@@ -855,7 +902,7 @@ CollabTM::ppc()
   fclose(f);
 }
 
-void
+bool
 CollabTM::compute_likelihood(bool validation)
 {
   assert (_env.use_ratings);
@@ -892,7 +939,7 @@ CollabTM::compute_likelihood(bool validation)
   a = s / k;  
   
   if (!validation)
-    return;
+    return true;
   
   bool stop = false;
   int why = -1;
@@ -918,7 +965,181 @@ CollabTM::compute_likelihood(bool validation)
   if (stop) {
     save_model();
     exit(0);
+    //return false; 
   }
+  return true;
+}
+
+void
+CollabTM::precision()
+{ 
+  double mhits10 = 0, mhits100 = 0;
+  double cumndcg10 = 0, cumndcg100 = 0;
+  uint32_t total_users = 0;
+  FILE *f = 0;
+  if (_save_ranking_file)
+    f = fopen(Env::file_str("/ranking.tsv").c_str(), "w");
+  
+  if (!_save_ranking_file) {
+    _sampled_users.clear();
+    do {
+      uint32_t n = gsl_rng_uniform_int(_r, _nusers);
+      _sampled_users[n] = true;
+    } while (_sampled_users.size() < 1000 && _sampled_users.size() < _nusers / 2);
+  }
+  
+  KVArray mlist(_ndocs);
+  KVIArray ndcglist(_ndocs);
+  for (UserMap::const_iterator itr = _sampled_users.begin();
+          itr != _sampled_users.end(); ++itr) {
+      uint32_t n = itr->first;
+
+      for (uint32_t m = 0; m < _ndocs; ++m) {
+          if (_ratings.r(n,m) > 0) { // skip training
+              mlist[m].first = m;
+              mlist[m].second = .0;
+              ndcglist[m].first = m;
+              ndcglist[m].second = 0;
+              continue;
+          }
+          double pred = per_rating_prediction(n, m); 
+          mlist[m].first = m;
+          mlist[m].second = pred;
+          Rating r(n,m); 
+          ndcglist[m].first = m;
+          CountMap::const_iterator itr = _test_map.find(r);
+          if (itr != _test_map.end()) {
+              ndcglist[m].second = itr->second;
+          } else { 
+              ndcglist[m].second = 0;
+          }
+      }
+
+      uint32_t hits10 = 0, hits100 = 0;
+      double   dcg10 = .0, dcg100 = .0; 
+      uint32_t n2 = 0; 
+      mlist.sort_by_value();
+      for (uint32_t j = 0; j < mlist.size() && j < _topN_by_user; ++j) {
+          KV &kv = mlist[j];
+          uint32_t m = kv.first;
+          double pred = kv.second;
+          Rating r(n, m);
+
+          uint32_t m2 = 0;
+          if (_save_ranking_file) {
+              IDMap::const_iterator it = _ratings.seq2user().find(n);
+              assert (it != _ratings.seq2user().end());
+
+              IDMap::const_iterator mt = _ratings.seq2movie().find(m);
+              if (mt == _ratings.seq2movie().end())
+                  continue;
+
+              m2 = mt->second;
+              n2 = it->second;
+          }
+
+          CountMap::const_iterator itr = _test_map.find(r);
+          if (itr != _test_map.end()) {
+              int v_ = itr->second;
+              int v = _ratings.rating_class(v_);
+              assert(v > 0);
+              if (_save_ranking_file) {
+                  if (_ratings.r(n, m) == .0) // skip training
+                      fprintf(f, "%d\t%d\t%.5f\t%d\n", n2, m2, pred, v);
+              }
+
+
+              if (j < 10) {
+                  hits10++;
+                  hits100++;
+                  dcg10 += (pow(2.,v_) - 1)/log(j+2);
+                  dcg100 += (pow(2.,v_) - 1)/log(j+2);
+              } else if (j < 100) {
+                  hits100++;
+                  dcg100 += (pow(2.,v_) - 1)/log(j+2);
+              }
+          } else {
+              if (_save_ranking_file) {
+                  if (_ratings.r(n, m) == .0) // skip training
+                      fprintf(f, "%d\t%d\t%.5f\t%d\n", n2, m2, pred, 0);
+              }
+          }
+      }
+      mhits10 += (double)hits10 / 10;
+      mhits100 += (double)hits100 / 100;
+      total_users++;
+
+      // DCG normalizer
+      double dcg10_gt = 0, dcg100_gt = 0;
+      bool user_has_test_ratings = true; 
+      ndcglist.sort_by_value();
+      for (uint32_t j = 0; j < ndcglist.size() && j < _topN_by_user; ++j) {
+          int v = ndcglist[j].second; 
+          if(v==0) { // all subsequent docs are irrelevant
+            if(j==0)
+                user_has_test_ratings = false; 
+            break;
+          }
+
+          if (j < 10) { 
+              dcg10_gt += (pow(2.,v) - 1)/log(j+2);
+              dcg100_gt += (pow(2.,v) - 1)/log(j+2);
+          } else if (j < 100) {
+              dcg100_gt += (pow(2.,v) - 1)/log(j+2);
+          }
+      }
+      if(user_has_test_ratings) { 
+          cumndcg10 += dcg10/dcg10_gt;
+          cumndcg100 += dcg100/dcg100_gt;
+      } 
+      //fprintf(_df, "%d (n2=%d): %.5f\t%.5f\n", 
+      //    n,
+      //    n2,
+      //    dcg10,
+      //    dcg10_gt);
+  }
+  if (_save_ranking_file)
+    fclose(f);
+  fprintf(_pf, "%.5f\t%.5f\n", 
+  	  mhits10 / total_users, 
+  	  mhits100 / total_users);
+  fflush(_pf);
+  fprintf(_df, "%.5f\t%.5f\n", 
+  	  cumndcg10 / total_users, 
+  	  cumndcg100 / total_users);
+  fflush(_df);
+}
+
+double
+CollabTM::per_rating_prediction(uint32_t user, uint32_t doc) const
+{
+  const double ** etheta = _theta.expected_v().const_data();
+  //const double ** elogtheta = _theta.expected_logv().const_data();
+  const double ** ebeta = _beta.expected_v().const_data();
+  //const double ** elogbeta = _beta.expected_logv().const_data();
+  
+  const double ** ex = _x.expected_v().const_data();
+  //const double ** elogx = _x.expected_logv().const_data();
+  const double ** eepsilon = _epsilon.expected_v().const_data();
+  //const double ** elogepsilon = _epsilon.expected_logv().const_data();
+  
+  const double *ea = _env.fixeda? NULL : _a.expected_v().const_data();
+  //const double *eloga = _env.fixeda ? NULL : _a.expected_logv().const_data();
+
+  double s = .0;
+  double item_contrib = 0;
+  for (uint32_t k = 0; k < _k; ++k) {
+    item_contrib = (etheta[doc][k] + eepsilon[doc][k]); 
+    if (!_env.fixeda)
+      s +=  item_contrib * ea[doc] * ex[user][k];
+    else
+      s += item_contrib * ex[user][k];
+  }
+    
+  if (s < 1e-30)
+    s = 1e-30;
+
+  return s;
 }
 
 
@@ -927,29 +1148,7 @@ CollabTM::per_rating_likelihood(uint32_t user, uint32_t doc, yval_t y) const
 {
   assert (_env.use_ratings);
 
-  const double ** etheta = _theta.expected_v().const_data();
-  const double ** elogtheta = _theta.expected_logv().const_data();
-  const double ** ebeta = _beta.expected_v().const_data();
-  const double ** elogbeta = _beta.expected_logv().const_data();
-  
-  const double ** ex = _x.expected_v().const_data();
-  const double ** elogx = _x.expected_logv().const_data();
-  const double ** eepsilon = _epsilon.expected_v().const_data();
-  const double ** elogepsilon = _epsilon.expected_logv().const_data();
-  
-  const double *ea = _env.fixeda? NULL : _a.expected_v().const_data();
-  const double *eloga = _env.fixeda ? NULL : _a.expected_logv().const_data();
-
-  double s = .0;
-  for (uint32_t k = 0; k < _k; ++k) {
-    if (!_env.fixeda)
-      s += (etheta[doc][k] + eepsilon[doc][k]) * ea[doc] * ex[user][k];
-    else
-      s += (etheta[doc][k] + eepsilon[doc][k]) * ex[user][k];
-  }
-    
-  if (s < 1e-30)
-    s = 1e-30;
+  double s = per_rating_prediction(user, doc); 
   info("%d, %d, s = %f, f(y) = %ld\n", p, q, s, factorial(y));
   
   double v = .0;
