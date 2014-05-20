@@ -29,6 +29,8 @@ CollabTM::CollabTM(Env &env, Ratings &ratings)
   if (_env.seed)
     gsl_rng_set(_r, _env.seed);
 
+  _userc.zero(); 
+
   _af = fopen(Env::file_str("/logl.txt").c_str(), "w");
   if (!_af)  {
     printf("cannot open logl file:%s\n",  strerror(errno));
@@ -216,6 +218,9 @@ CollabTM::load_validation_and_test_sets()
   fclose(testf);
   printf("+ loaded validation and test sets from %s\n", _env.datfname.c_str());
   fflush(stdout);
+
+  // REMOVE ME 
+    return; 
 
   // select some documents for cold start recommendations
   // remove them from training, test and validation
