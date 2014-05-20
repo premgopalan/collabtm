@@ -219,9 +219,6 @@ CollabTM::load_validation_and_test_sets()
   printf("+ loaded validation and test sets from %s\n", _env.datfname.c_str());
   fflush(stdout);
 
-  // REMOVE ME 
-    return; 
-
   // select some documents for cold start recommendations
   // remove them from training, test and validation
   Env::plog("test ratings before removing heldout cold start docs", _test_map.size());
