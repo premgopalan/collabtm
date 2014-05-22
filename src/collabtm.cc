@@ -42,6 +42,16 @@ CollabTM::CollabTM(Env &env, Ratings &ratings)
     printf("cannot open heldout file:%s\n",  strerror(errno));
     exit(-1);
   }
+  _cs_tf = fopen(Env::file_str("/coldstart_test.txt").c_str(), "w");
+  if (!_cs_tf)  {
+    printf("cannot open heldout file:%s\n",  strerror(errno));
+    exit(-1);
+  }
+  _cs_tf2 = fopen(Env::file_str("/coldstart_test_perdoc.txt").c_str(), "w");
+  if (!_cs_tf2)  {
+    printf("cannot open heldout file:%s\n",  strerror(errno));
+    exit(-1);
+  }
   _tf = fopen(Env::file_str("/test.txt").c_str(), "w");
   if (!_tf)  {
     printf("cannot open heldout file:%s\n",  strerror(errno));
@@ -1525,13 +1535,33 @@ CollabTM::per_rating_prediction(uint32_t user, uint32_t doc) const
   return s;
 }
 
+double
+CollabTM::coldstart_per_rating_prediction(uint32_t user, uint32_t docseq) const
+{
+  assert (_env.fixeda);
+  const double ** etheta = _cstheta.expected_v().const_data();
+  const double ** ex = _x.expected_v().const_data();
+
+  double s = .0;
+  double item_contrib = 0;
+  for (uint32_t k = 0; k < _k; ++k) {
+    item_contrib = etheta[docseq][k];
+    s += item_contrib * ex[user][k];
+  }
+  if (s < 1e-30)
+    s = 1e-30;
+  return s;
+}
+
 
 double
-CollabTM::per_rating_likelihood(uint32_t user, uint32_t doc, yval_t y) const
+CollabTM::per_rating_likelihood(uint32_t user, uint32_t doc, yval_t y, 
+				bool coldstart) const
 {
   assert (_env.use_ratings);
 
-  double s = per_rating_prediction(user, doc); 
+  double s = coldstart? coldstart_per_rating_prediction(user, doc) : 
+    per_rating_prediction(user, doc); 
   info("%d, %d, s = %f, f(y) = %ld\n", p, q, s, factorial(y));
   
   double v = .0;
@@ -1560,10 +1590,8 @@ CollabTM::log_factorial(uint32_t n)  const
 } 
 
 double
-CollabTM::coldstart_local_inference(uint32_t user, uint32_t doc)
+CollabTM::coldstart_local_inference(uint32_t doc)
 {
-  assert(_env.fixeda && _env.use_docs);
-
   // keep _beta fixed and compute theta for coldstart docs
   _cstheta.set_to_prior();
   _cstheta.set_to_prior_curr();
@@ -1571,7 +1599,7 @@ CollabTM::coldstart_local_inference(uint32_t user, uint32_t doc)
   assert (_doc_to_cs_idmap.find(doc) != _doc_to_cs_idmap.end());
   uint32_t docseq = _doc_to_cs_idmap[doc];
 
-  Array phi(_k);  
+  Array phi(_k);
   const WordVec *w = _ratings.get_words(doc);
   for (uint32_t nw = 0; w && nw < w->size(); nw++) {
     WordCount p = (*w)[nw];
@@ -1592,4 +1620,47 @@ CollabTM::coldstart_local_inference(uint32_t user, uint32_t doc)
   _cstheta.update_rate_next(betasum);
   _cstheta.swap();
   _cstheta.compute_expectations();
+
+  // save it
+  _cstheta.save_state(_ratings.seq2movie());
+}
+
+double
+CollabTM::coldstart_rating_likelihood()
+{
+  // compute likelihood of "heldout" ratings
+  // ALL ratings for a coldstart document are heldout
+
+  double s = .0;
+  uint32_t k = 0;
+  for (MovieMap::const_iterator i = _cold_start_docs.begin(); 
+       i != _cold_start_docs.end(); ++i) {
+    double ss = .0;
+    uint32_t kk = 0;
+    uint32_t nd = i->first;
+    const vector<uint32_t> *users = _ratings.get_users(nd);
+
+    // need this to access _cstheta
+    assert (_doc_to_cs_idmap.find(nd) != _doc_to_cs_idmap.end());
+    uint32_t docseq = _doc_to_cs_idmap[nd];
+    
+    for (uint32_t i = 0; i < users->size(); ++i) {
+      uint32_t nu = (*users)[i];
+      yval_t y = _ratings.r(nu,nd);
+      assert (y > 0);
+
+      // note: need docseq whenever looking up "cstheta"
+      double u = per_rating_likelihood(nu, docseq, y, true);
+      s += u;
+      k += 1;
+      ss += u;
+      kk += 1;
+    }
+    
+    fprintf(_cs_tf2, "%d\t%d\t%.9f\t%d\n", _iter, duration(), ss / kk, kk);
+    fflush(_cs_tf2);
+  }
+  
+  fprintf(_cs_tf, "%d\t%d\t%.9f\t%d\n", _iter, duration(), s / k, k);
+  fflush(_cs_tf);
 }

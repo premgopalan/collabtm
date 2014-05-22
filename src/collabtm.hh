@@ -8,7 +8,7 @@
 class CollabTM {
 public:
   CollabTM(Env &env, Ratings &ratings);
-  ~CollabTM() { fclose(_af); }
+  ~CollabTM();
   
   void batch_infer();
   void online_infer(); 
@@ -43,14 +43,19 @@ private:
   void save_item_state(string s, const Matrix &mat);
   void save_state(string s, const Array &mat);
   bool compute_likelihood(bool validation);
-  double per_rating_likelihood(uint32_t user, uint32_t doc, yval_t y) const;
+  double per_rating_likelihood(uint32_t user, uint32_t doc, yval_t y, 
+			       bool coldstart=false) const;
   double per_rating_prediction(uint32_t user, uint32_t doc) const;
 
-  double coldstart_local_inference(uint32_t user, uint32_t doc);
   uint32_t duration() const;
   bool rating_ok(const Rating &r) const;
   uint32_t factorial(uint32_t n)  const;
   double log_factorial(uint32_t n)  const;
+
+  double coldstart_local_inference();
+  double coldstart_local_inference(uint32_t doc);
+  double coldstart_rating_likelihood();
+  double coldstart_per_rating_prediction(uint32_t user, uint32_t docseq) const;
 
   Env &_env;
   Ratings &_ratings;
@@ -79,6 +84,8 @@ private:
   FILE *_tf;
   FILE *_pf;
   FILE *_df;
+  FILE *_cs_tf;
+  FILE *_cs_tf2;
   double _prev_h;
   uint32_t _nh;
   bool _save_ranking_file;
@@ -94,6 +101,18 @@ private:
   uint32_t _ncsdoc_seq;
   IDMap _doc_to_cs_idmap;
 };
+
+inline
+CollabTM::~CollabTM()
+{
+  fclose(_af);
+  fclose(_vf);
+  fclose(_tf);
+  fclose(_pf);
+  fclose(_df);
+  fclose(_cs_tf);
+  fclose(_cs_tf2);
+}
 
 inline uint32_t
 CollabTM::duration() const
