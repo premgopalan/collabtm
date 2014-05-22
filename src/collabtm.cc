@@ -1539,16 +1539,21 @@ CollabTM::per_rating_prediction(uint32_t user, uint32_t doc) const
 }
 
 double
-CollabTM::coldstart_per_rating_prediction(uint32_t user, uint32_t docseq) const
+CollabTM::coldstart_per_rating_prediction(uint32_t user, uint32_t doc) const
 {
   assert (_env.fixeda);
   const double ** etheta = _cstheta.expected_v().const_data();
   const double ** ex = _x.expected_v().const_data();
-
+  const double ** eepsilon = _epsilon.expected_v().const_data();
+  
+  IDMap::const_iterator itr = _doc_to_cs_idmap.find(doc);
+  assert (itr != _doc_to_cs_idmap.end());
+  uint32_t docseq = itr->second;
+  
   double s = .0;
   double item_contrib = 0;
   for (uint32_t k = 0; k < _k; ++k) {
-    item_contrib = etheta[docseq][k];
+    item_contrib = (etheta[docseq][k] + eepsilon[doc][k]);
     s += item_contrib * ex[user][k];
   }
   if (s < 1e-30)
@@ -1655,21 +1660,22 @@ CollabTM::coldstart_rating_likelihood()
     // need this to access _cstheta
     assert (_doc_to_cs_idmap.find(nd) != _doc_to_cs_idmap.end());
     uint32_t docseq = _doc_to_cs_idmap[nd];
+    lerr("heldout doc %d seq %d", nd, docseq);
     
-    for (uint32_t i = 0; i < users->size(); ++i) {
-      uint32_t nu = (*users)[i];
+    for (uint32_t u = 0; u < users->size(); ++u) {
+      uint32_t nu = (*users)[u];
       yval_t y = _ratings.r(nu,nd);
       assert (y > 0);
 
       // note: need docseq whenever looking up "cstheta"
-      double u = per_rating_likelihood(nu, docseq, y, true);
+      double u = per_rating_likelihood(nu, nd, y, true);
       s += u;
       k += 1;
       ss += u;
       kk += 1;
     }
     
-    fprintf(_cs_tf2, "%d\t%d\t%.9f\t%d\n", _iter, duration(), ss / kk, kk);
+    fprintf(_cs_tf2, "%d\t%d\t%.9f\t%d\n", nd, docseq, ss / kk, kk);
     fflush(_cs_tf2);
   }
   

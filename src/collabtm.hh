@@ -54,7 +54,7 @@ private:
 
   double coldstart_local_inference();
   double coldstart_rating_likelihood();
-  double coldstart_per_rating_prediction(uint32_t user, uint32_t docseq) const;
+  double coldstart_per_rating_prediction(uint32_t user, uint32_t doc) const;
 
   Env &_env;
   Ratings &_ratings;
