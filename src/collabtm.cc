@@ -11,7 +11,6 @@ CollabTM::CollabTM(Env &env, Ratings &ratings)
     _tau0(1024), _kappa(.5),
     _userc(_nusers),
     _wordc(_nvocab),
-
     _iter(0),
     _start_time(time(0)),
     _theta("theta", 0.3, 0.3, _ndocs,_k,&_r),
@@ -19,9 +18,11 @@ CollabTM::CollabTM(Env &env, Ratings &ratings)
     _x("x", 0.3, 0.3, _nusers,_k,&_r),
     _epsilon("epsilon", 0.3, 0.3, _ndocs,_k,&_r),
     _a("a", 0.3, 0.3, _ndocs, &_r),
+    _cstheta("cstheta", 0.3, 0.3, _ndocs,_k,&_r),
     _prev_h(.0), _nh(0),
     _save_ranking_file(false),
-    _topN_by_user(100)
+    _topN_by_user(100),
+    _ncsdoc_seq(0)
 {
   gsl_rng_env_setup();
   const gsl_rng_type *T = gsl_rng_default;
@@ -237,6 +238,13 @@ CollabTM::load_validation_and_test_sets()
     c++;
   }
   Env::plog("number of heldout cold start docs", _cold_start_docs.size());
+
+  // create sequence ids for cold start docs
+  _ncsdoc_seq = 0;
+  for (MovieMap::const_iterator i = _cold_start_docs.begin(); 
+       i != _cold_start_docs.end(); ++i) {
+    _doc_to_cs_idmap[i->first] = _ncsdoc_seq++;
+  }
 
   CountMap::iterator i = _test_map.begin(); 
   while (i != _test_map.end()) {
@@ -1552,7 +1560,36 @@ CollabTM::log_factorial(uint32_t n)  const
 } 
 
 double
-CollabTM::coldstart_ratings_likelihood(uint32_t user, uint32_t doc) const
+CollabTM::coldstart_local_inference(uint32_t user, uint32_t doc)
 {
-  // XXX
+  assert(_env.fixeda && _env.use_docs);
+
+  // keep _beta fixed and compute theta for coldstart docs
+  _cstheta.set_to_prior();
+  _cstheta.set_to_prior_curr();
+
+  assert (_doc_to_cs_idmap.find(doc) != _doc_to_cs_idmap.end());
+  uint32_t docseq = _doc_to_cs_idmap[doc];
+
+  Array phi(_k);  
+  const WordVec *w = _ratings.get_words(doc);
+  for (uint32_t nw = 0; w && nw < w->size(); nw++) {
+    WordCount p = (*w)[nw];
+    uint32_t word = p.first;
+    uint32_t count = p.second;
+	  
+    get_phi(_cstheta, docseq, _beta, word, phi);
+
+    if (count > 1)
+      phi.scale(count);
+    
+    _cstheta.update_shape_next(docseq, phi);
+    _beta.update_shape_next(word, phi);
+  }
+
+  Array betasum(_k);
+  _beta.sum_rows(betasum);
+  _cstheta.update_rate_next(betasum);
+  _cstheta.swap();
+  _cstheta.compute_expectations();
 }

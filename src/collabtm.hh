@@ -46,7 +46,7 @@ private:
   double per_rating_likelihood(uint32_t user, uint32_t doc, yval_t y) const;
   double per_rating_prediction(uint32_t user, uint32_t doc) const;
 
-  double coldstart_ratings_likelihood(uint32_t user, uint32_t doc) const;
+  double coldstart_local_inference(uint32_t user, uint32_t doc);
   uint32_t duration() const;
   bool rating_ok(const Rating &r) const;
   uint32_t factorial(uint32_t n)  const;
@@ -70,6 +70,7 @@ private:
   GPMatrixGR _x;
   GPMatrix _epsilon;
   GPArray _a;
+  GPMatrix _cstheta; // coldstart docs
 
   uint32_t _start_time;
   gsl_rng *_r;
@@ -89,6 +90,9 @@ private:
   UserMap _sampled_users;
   UserMap _sampled_movies;
 
+  // coldstart docs sequence ids
+  uint32_t _ncsdoc_seq;
+  IDMap _doc_to_cs_idmap;
 };
 
 inline uint32_t

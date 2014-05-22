@@ -46,7 +46,6 @@ typedef std::map<uint32_t, bool> MovieMap;
 typedef std::map<uint32_t, bool> BoolMap;
 typedef std::map<uint32_t, double> DoubleMap;
 typedef std::map<uint32_t, Array *> ArrayMap;
-typedef std::map<uint32_t, uint32_t> ValMap;
 typedef std::map<uint32_t, vector<uint32_t> > MapVec;
 typedef MapVec SparseMatrix2;
 typedef std::map<Rating, bool> SampleMap;
