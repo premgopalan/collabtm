@@ -53,7 +53,6 @@ private:
   double log_factorial(uint32_t n)  const;
 
   double coldstart_local_inference();
-  double coldstart_local_inference(uint32_t doc);
   double coldstart_rating_likelihood();
   double coldstart_per_rating_prediction(uint32_t user, uint32_t docseq) const;
 

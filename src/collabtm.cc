@@ -443,6 +443,8 @@ CollabTM::batch_infer()
     seq_init();
   }
   
+  lerr("within batch infer");
+
   approx_log_likelihood();
 
   Array phi(_k);
@@ -551,6 +553,7 @@ CollabTM::batch_infer()
 	compute_likelihood(false);
       }
       save_model();
+      coldstart_rating_likelihood();
     }
     
     if (_env.save_state_now)
@@ -1590,29 +1593,34 @@ CollabTM::log_factorial(uint32_t n)  const
 } 
 
 double
-CollabTM::coldstart_local_inference(uint32_t doc)
+CollabTM::coldstart_local_inference()
 {
   // keep _beta fixed and compute theta for coldstart docs
   _cstheta.set_to_prior();
   _cstheta.set_to_prior_curr();
 
-  assert (_doc_to_cs_idmap.find(doc) != _doc_to_cs_idmap.end());
-  uint32_t docseq = _doc_to_cs_idmap[doc];
-
-  Array phi(_k);
-  const WordVec *w = _ratings.get_words(doc);
-  for (uint32_t nw = 0; w && nw < w->size(); nw++) {
-    WordCount p = (*w)[nw];
-    uint32_t word = p.first;
-    uint32_t count = p.second;
-	  
-    get_phi(_cstheta, docseq, _beta, word, phi);
-
-    if (count > 1)
-      phi.scale(count);
+  for (MovieMap::const_iterator i = _cold_start_docs.begin(); 
+       i != _cold_start_docs.end(); ++i) {
+    uint32_t doc = i->first;
     
-    _cstheta.update_shape_next(docseq, phi);
-    _beta.update_shape_next(word, phi);
+    assert (_doc_to_cs_idmap.find(doc) != _doc_to_cs_idmap.end());
+    uint32_t docseq = _doc_to_cs_idmap[doc];
+    
+    Array phi(_k);
+    const WordVec *w = _ratings.get_words(doc);
+    for (uint32_t nw = 0; w && nw < w->size(); nw++) {
+      WordCount p = (*w)[nw];
+      uint32_t word = p.first;
+      uint32_t count = p.second;
+      
+      get_phi(_cstheta, docseq, _beta, word, phi);
+      
+      if (count > 1)
+	phi.scale(count);
+      
+      _cstheta.update_shape_next(docseq, phi);
+      _beta.update_shape_next(word, phi);
+    }
   }
 
   Array betasum(_k);
@@ -1628,6 +1636,10 @@ CollabTM::coldstart_local_inference(uint32_t doc)
 double
 CollabTM::coldstart_rating_likelihood()
 {
+  lerr("computing coldstart local thetas");
+  coldstart_local_inference();
+  
+  lerr("computing coldstart rating likelihood");
   // compute likelihood of "heldout" ratings
   // ALL ratings for a coldstart document are heldout
 
@@ -1663,4 +1675,5 @@ CollabTM::coldstart_rating_likelihood()
   
   fprintf(_cs_tf, "%d\t%d\t%.9f\t%d\n", _iter, duration(), s / k, k);
   fflush(_cs_tf);
+  lerr("computing coldstart likelihood done");
 }
