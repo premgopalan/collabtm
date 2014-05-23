@@ -62,8 +62,18 @@ CollabTM::CollabTM(Env &env, Ratings &ratings)
     printf("cannot open logl file:%s\n",  strerror(errno));
     exit(-1);
   }
+  _cs_pf = fopen(Env::file_str("/coldstart_precision.txt").c_str(), "w");
+  if (!_cs_pf)  {
+    printf("cannot open logl file:%s\n",  strerror(errno));
+    exit(-1);
+  }
   _df = fopen(Env::file_str("/ndcg.txt").c_str(), "w");
   if (!_df)  {
+    printf("cannot open logl file:%s\n",  strerror(errno));
+    exit(-1);
+  }
+  _cs_df = fopen(Env::file_str("/coldstart_ndcg.txt").c_str(), "w");
+  if (!_cs_df)  {
     printf("cannot open logl file:%s\n",  strerror(errno));
     exit(-1);
   }
@@ -261,6 +271,8 @@ CollabTM::load_validation_and_test_sets()
     const Rating &r = i->first;
     MovieMap::const_iterator itr = _cold_start_docs.find(r.second);
     if (itr != _cold_start_docs.end()) {
+      // insert into coldstart test map
+      _coldstart_test_map[r] = i->second;
       debug("test: erasing rating r (%d,%d) in heldout cold start", 
 	    _ratings.to_user_id(r.first), 
 	    _ratings.to_movie_id(r.second));
@@ -326,6 +338,7 @@ CollabTM::gen_ranking_for_users()
     // get and output rankings
     _save_ranking_file = true;
     precision();
+    coldstart_precision();
     printf("DONE writing ranking.tsv in output directory\n");
 
     // get and output likelihood
@@ -501,6 +514,15 @@ CollabTM::batch_infer()
 	  if (mp != _cold_start_docs.end() && mp->second == true)
 	    continue;
 
+	  //
+	  // NOTE: we don't need to check this because test, validation ratings
+	  // are not included the lists maintained in the Ratings class
+	  // *and* since we don't iterate over zero ratings
+	  //
+	  //Rating r(nu,nd);
+	  //if (!is_training(r))
+	  //continue;
+
 	  yval_t y = _ratings.r(nu,nd);
 	  
 	  assert (y > 0);
@@ -554,6 +576,8 @@ CollabTM::batch_infer()
       }
       save_model();
       coldstart_rating_likelihood();
+      precision();
+      coldstart_precision();
     }
     
     if (_env.save_state_now)
@@ -1391,24 +1415,25 @@ CollabTM::precision()
       uint32_t n = itr->first;
 
       for (uint32_t m = 0; m < _ndocs; ++m) {
-          if (_ratings.r(n,m) > 0) { // skip training
-              mlist[m].first = m;
-              mlist[m].second = .0;
-              ndcglist[m].first = m;
-              ndcglist[m].second = 0;
-              continue;
-          }
-          double pred = per_rating_prediction(n, m); 
-          mlist[m].first = m;
-          mlist[m].second = pred;
-          Rating r(n,m); 
-          ndcglist[m].first = m;
-          CountMap::const_iterator itr = _test_map.find(r);
-          if (itr != _test_map.end()) {
-              ndcglist[m].second = itr->second;
-          } else { 
-              ndcglist[m].second = 0;
-          }
+	Rating r(n,m);
+	if (_ratings.r(n,m) > 0 || is_validation(r)) { // skip training
+	  mlist[m].first = m;
+	  mlist[m].second = .0;
+	  ndcglist[m].first = m;
+	  ndcglist[m].second = 0;
+	  continue;
+	}
+	
+	double pred = per_rating_prediction(n, m); 
+	mlist[m].first = m;
+	mlist[m].second = pred;
+	ndcglist[m].first = m;
+	CountMap::const_iterator itr = _test_map.find(r);
+	if (itr != _test_map.end()) {
+	  ndcglist[m].second = itr->second;
+	} else { 
+	  ndcglist[m].second = 0;
+	}
       }
 
       uint32_t hits10 = 0, hits100 = 0;
@@ -1448,8 +1473,8 @@ CollabTM::precision()
               if (j < 10) {
                   hits10++;
                   hits100++;
-                  dcg10 += (pow(2.,v_) - 1)/log(j+2);
-                  dcg100 += (pow(2.,v_) - 1)/log(j+2);
+		  dcg10 += (pow(2.,v_) - 1)/log(j+2);
+		  dcg100 += (pow(2.,v_) - 1)/log(j+2);
               } else if (j < 100) {
                   hits100++;
                   dcg100 += (pow(2.,v_) - 1)/log(j+2);
@@ -1505,6 +1530,148 @@ CollabTM::precision()
   	  cumndcg100 / total_users);
   fflush(_df);
 }
+
+
+void
+CollabTM::coldstart_precision()
+{ 
+  double mhits10 = 0, mhits100 = 0;
+  double cumndcg10 = 0, cumndcg100 = 0;
+  uint32_t total_users = 0;
+  FILE *f = 0;
+  if (_save_ranking_file)
+    f = fopen(Env::file_str("/ranking.tsv").c_str(), "w");
+  
+  if (!_save_ranking_file) {
+    _sampled_users.clear();
+    do {
+      uint32_t n = gsl_rng_uniform_int(_r, _nusers);
+      _sampled_users[n] = true;
+    } while (_sampled_users.size() < 1000 && _sampled_users.size() < _nusers / 2);
+  }
+  
+  KVArray mlist(_ndocs);
+  KVIArray ndcglist(_ndocs);
+  for (UserMap::const_iterator itr = _sampled_users.begin();
+          itr != _sampled_users.end(); ++itr) {
+      uint32_t n = itr->first;
+
+      // now the items set consists of only those in the "coldstart" list
+      for (MovieMap::const_iterator i = _cold_start_docs.begin(); 
+	   i != _cold_start_docs.end(); ++i) {
+	uint32_t m = i->first;
+	Rating r(n,m);
+	//
+	// none of these ratings could have appeared in training
+	// so we rank all of them
+	//
+	double pred = per_rating_prediction(n, m); 
+	mlist[m].first = m;
+	mlist[m].second = pred;
+	ndcglist[m].first = m;
+	CountMap::const_iterator itr = _coldstart_test_map.find(r);
+	if (itr != _coldstart_test_map.end()) {
+	  ndcglist[m].second = itr->second;
+	} else { 
+	  ndcglist[m].second = 0;
+	}
+      }
+
+      uint32_t hits10 = 0, hits100 = 0;
+      double   dcg10 = .0, dcg100 = .0; 
+      uint32_t n2 = 0; 
+      mlist.sort_by_value();
+      for (uint32_t j = 0; j < mlist.size() && j < _topN_by_user; ++j) {
+          KV &kv = mlist[j];
+          uint32_t m = kv.first;
+          double pred = kv.second;
+          Rating r(n, m);
+
+          uint32_t m2 = 0;
+          if (_save_ranking_file) {
+              IDMap::const_iterator it = _ratings.seq2user().find(n);
+              assert (it != _ratings.seq2user().end());
+
+              IDMap::const_iterator mt = _ratings.seq2movie().find(m);
+              if (mt == _ratings.seq2movie().end())
+                  continue;
+
+              m2 = mt->second;
+              n2 = it->second;
+          }
+
+          CountMap::const_iterator itr = _coldstart_test_map.find(r);
+          if (itr != _coldstart_test_map.end()) {
+              int v_ = itr->second;
+              int v = _ratings.rating_class(v_);
+              assert(v > 0);
+              if (_save_ranking_file) {
+                  if (_ratings.r(n, m) == .0) // skip training
+                      fprintf(f, "%d\t%d\t%.5f\t%d\n", n2, m2, pred, v);
+              }
+
+
+              if (j < 10) {
+                  hits10++;
+                  hits100++;
+		  dcg10 += (pow(2.,v_) - 1)/log(j+2);
+		  dcg100 += (pow(2.,v_) - 1)/log(j+2);
+              } else if (j < 100) {
+                  hits100++;
+                  dcg100 += (pow(2.,v_) - 1)/log(j+2);
+              }
+          } else {
+              if (_save_ranking_file) {
+                  if (_ratings.r(n, m) == .0) // skip training
+                      fprintf(f, "%d\t%d\t%.5f\t%d\n", n2, m2, pred, 0);
+              }
+          }
+      }
+      mhits10 += (double)hits10 / 10;
+      mhits100 += (double)hits100 / 100;
+      total_users++;
+
+      // DCG normalizer
+      double dcg10_gt = 0, dcg100_gt = 0;
+      bool user_has_test_ratings = true; 
+      ndcglist.sort_by_value();
+      for (uint32_t j = 0; j < ndcglist.size() && j < _topN_by_user; ++j) {
+          int v = ndcglist[j].second; 
+          if(v==0) { // all subsequent docs are irrelevant
+            if(j==0)
+                user_has_test_ratings = false; 
+            break;
+          }
+
+          if (j < 10) { 
+              dcg10_gt += (pow(2.,v) - 1)/log(j+2);
+              dcg100_gt += (pow(2.,v) - 1)/log(j+2);
+          } else if (j < 100) {
+              dcg100_gt += (pow(2.,v) - 1)/log(j+2);
+          }
+      }
+      if(user_has_test_ratings) { 
+          cumndcg10 += dcg10/dcg10_gt;
+          cumndcg100 += dcg100/dcg100_gt;
+      } 
+      //fprintf(_df, "%d (n2=%d): %.5f\t%.5f\n", 
+      //    n,
+      //    n2,
+      //    dcg10,
+      //    dcg10_gt);
+  }
+  if (_save_ranking_file)
+    fclose(f);
+  fprintf(_cs_pf, "%.5f\t%.5f\n", 
+  	  mhits10 / total_users, 
+  	  mhits100 / total_users);
+  fflush(_cs_pf);
+  fprintf(_cs_df, "%.5f\t%.5f\n", 
+  	  cumndcg10 / total_users, 
+  	  cumndcg100 / total_users);
+  fflush(_cs_df);
+}
+
 
 double
 CollabTM::per_rating_prediction(uint32_t user, uint32_t doc) const
@@ -1660,7 +1827,7 @@ CollabTM::coldstart_rating_likelihood()
     // need this to access _cstheta
     assert (_doc_to_cs_idmap.find(nd) != _doc_to_cs_idmap.end());
     uint32_t docseq = _doc_to_cs_idmap[nd];
-    lerr("heldout doc %d seq %d", nd, docseq);
+    debug("heldout doc %d seq %d", nd, docseq);
     
     for (uint32_t u = 0; u < users->size(); ++u) {
       uint32_t nu = (*users)[u];

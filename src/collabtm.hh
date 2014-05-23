@@ -20,6 +20,8 @@ private:
   void initialize_perturb_betas();
   void approx_log_likelihood();
   void precision(); 
+  void coldstart_precision();
+
   void get_phi(GPBase<Matrix> &a, uint32_t ai, 
 	       GPBase<Matrix> &b, uint32_t bi, 
 	       Array &phi);
@@ -48,13 +50,15 @@ private:
   double per_rating_prediction(uint32_t user, uint32_t doc) const;
 
   uint32_t duration() const;
-  bool rating_ok(const Rating &r) const;
+  bool is_training(const Rating &r) const;
   uint32_t factorial(uint32_t n)  const;
   double log_factorial(uint32_t n)  const;
 
   double coldstart_local_inference();
   double coldstart_rating_likelihood();
   double coldstart_per_rating_prediction(uint32_t user, uint32_t doc) const;
+
+  bool is_validation(const Rating &r) const;
 
   Env &_env;
   Ratings &_ratings;
@@ -82,7 +86,9 @@ private:
   FILE *_vf;
   FILE *_tf;
   FILE *_pf;
+  FILE *_cs_pf;
   FILE *_df;
+  FILE *_cs_df;
   FILE *_cs_tf;
   FILE *_cs_tf2;
   double _prev_h;
@@ -92,6 +98,7 @@ private:
 
   CountMap _validation_map;  
   CountMap _test_map;
+  CountMap _coldstart_test_map;
   MovieMap _cold_start_docs;
   UserMap _sampled_users;
   UserMap _sampled_movies;
@@ -111,6 +118,8 @@ CollabTM::~CollabTM()
   fclose(_df);
   fclose(_cs_tf);
   fclose(_cs_tf2);
+  fclose(_cs_pf);
+  fclose(_cs_df);
 }
 
 inline uint32_t
@@ -121,9 +130,13 @@ CollabTM::duration() const
 }
 
 inline bool
-CollabTM::rating_ok(const Rating &r) const
+CollabTM::is_training(const Rating &r) const
 {
   assert (r.first  < _nusers && r.second < _ndocs);
+
+  MovieMap::const_iterator mp = _cold_start_docs.find(r.second);
+  if (mp != _cold_start_docs.end())
+    return false;
   const CountMap::const_iterator u = _test_map.find(r);
   if (u != _test_map.end())
     return false;
@@ -131,6 +144,16 @@ CollabTM::rating_ok(const Rating &r) const
   if (w != _validation_map.end())
     return false;
   return true;
+}
+
+inline bool
+CollabTM::is_validation(const Rating &r) const
+{
+  assert (r.first  < _nusers && r.second < _ndocs);
+  CountMap::const_iterator itr = _validation_map.find(r);
+  if (itr != _validation_map.end())
+    return true;
+  return false;
 }
 
 
