@@ -12,6 +12,8 @@ public:
   
   void batch_infer();
   void online_infer(); 
+  void write_mult_format();
+
   void gen_ranking_for_users(); 
   void ppc();
 
