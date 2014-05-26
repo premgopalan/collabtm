@@ -369,6 +369,7 @@ CollabTM::gen_ranking_for_users()
     printf("done\n");
     printf("coldstart local inference and HOL: "); fflush(stdout);
     coldstart_rating_likelihood();
+    printf("done\n");
     printf("coldstart precision: "); fflush(stdout);
     coldstart_precision();
     printf("done\n");
@@ -1718,7 +1719,7 @@ CollabTM::coldstart_precision()
   KVArray mlist(_ndocs);
   KVIArray ndcglist(_ndocs);
   uint32_t cc = 0;  
-  for (uint32_t itr = 0; itr < _cs_test_users->size() && itr < 10000; itr++) {
+  for (uint32_t itr = 0; itr < _cs_test_users->size() && itr < 10000; itr++, cc++) {
     uint32_t n =(*_cs_test_users)[itr];
     
     // now the items set consists of only those in the "coldstart" list
@@ -1962,6 +1963,8 @@ CollabTM::coldstart_local_inference()
       _beta.update_shape_next(word, phi);
     }
     processed_docs++;
+    printf("\r%d", processed_docs);
+    fflush(stdout);
   }
   Env::plog("processed %d cold-start docs", processed_docs);
 
