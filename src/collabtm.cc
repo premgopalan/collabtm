@@ -351,35 +351,8 @@ CollabTM::gen_ranking_for_users()
 void
 CollabTM::write_mult_format()
 {
-  // in-matrix: train, users
-  FILE *outf = fopen(Env::file_str("/in-train-users.dat").c_str(), "w");
-  for (uint32_t nu = 0; nu < _nusers; ++nu) {
-    const vector<uint32_t> *docs = _ratings.get_movies(nu);
-    uint32_t x = 0;
-    for (uint32_t j = 0; j < docs->size(); ++j) {
-      uint32_t nd = (*docs)[j];
-      MovieMap::const_iterator mp = _cold_start_docs.find(nd);
-      if (mp != _cold_start_docs.end())
-	continue;
-      x++;
-    }
-    if (x == 0)
-      continue;   // all docs in cold start for this user; skip
-
-    fprintf(outf, "%d", _ratings.to_user_id(nu));
-    for (uint32_t j = 0; j < docs->size(); ++j) {
-      uint32_t nd = (*docs)[j];
-      MovieMap::const_iterator mp = _cold_start_docs.find(nd);
-      if (mp != _cold_start_docs.end())
-	continue;
-      fprintf(outf, "\t%d:%d", _ratings.to_movie_id(nd), _ratings.r(nu,nd));
-    }
-    fprintf(outf, "\n");
-  }
-  fclose(outf);
-
-  // out-matrix: train, users
-  outf = fopen(Env::file_str("/out-train-users.dat").c_str(), "w");
+  // out-matrix: test, users
+  FILE * outf = fopen(Env::file_str("/out-test-users.dat").c_str(), "w");
   for (uint32_t nu = 0; nu < _nusers; ++nu) {
     const vector<uint32_t> *docs = _ratings.get_movies(nu);
 
@@ -394,7 +367,7 @@ CollabTM::write_mult_format()
     if (x == 0)
       continue;   // no docs in cold start for this user; skip
 
-    fprintf(outf, "%d", _ratings.to_user_id(nu));
+    fprintf(outf, "%d\t%d", _ratings.to_user_id(nu), x);
     for (uint32_t j = 0; j < docs->size(); ++j) {
       uint32_t nd = (*docs)[j];
       
@@ -402,50 +375,99 @@ CollabTM::write_mult_format()
       if (mp == _cold_start_docs.end())
 	continue;
 
-      fprintf(outf, "\t%d:%d", _ratings.to_movie_id(nd), _ratings.r(nu,nd));
+      //fprintf(outf, "\t%d:%d", _ratings.to_movie_id(nd), _ratings.r(nu,nd));
+      fprintf(outf, "\t%d", _ratings.to_movie_id(nd));
     }
     fprintf(outf, "\n");
   }
   fclose(outf);
 
-  // in-matrix: train, items
+  // in-matrix & out-matrix: train, items
   outf = fopen(Env::file_str("/in-train-items.dat").c_str(), "w");
+  FILE *outf2 = fopen(Env::file_str("/out-train-items.dat").c_str(), "w");
+  FreqMap docID_to_chong_docID; // mapping of docIDs to 
   for (uint32_t nd = 0; nd < _ndocs; ++nd) {
     MovieMap::const_iterator mp = _cold_start_docs.find(nd);
-    if (mp != _cold_start_docs.end())
+    if (mp != _cold_start_docs.end()) { 
+	  fprintf(outf2, "%d\t0\n", _ratings.to_movie_id(nd)); 
       continue; // a cold start doc, skip
+    } 
 
     const vector<uint32_t> *users = _ratings.get_users(nd);
     if (users->size() == 0)
       continue;
+
+	uint32_t s = docID_to_chong_docID.size();
+	docID_to_chong_docID[_ratings.to_movie_id(nd)] = s;
     
-    fprintf(outf, "%d", _ratings.to_movie_id(nd));
+    fprintf(outf, "%d\t%d", _ratings.to_movie_id(nd), users->size());
+    fprintf(outf2, "%d\t%d", _ratings.to_movie_id(nd), users->size());
     for (uint32_t j = 0; j < users->size(); ++j) {
       uint32_t nu = (*users)[j];
       yval_t y = _ratings.r(nu,nd);
-      fprintf(outf, "\t%d:%d", _ratings.to_user_id(nu), y);
+      //fprintf(outf, "\t%d:%d", _ratings.to_user_id(nu), y);
+      //fprintf(outf2, "\t%d:%d", _ratings.to_user_id(nu), y);
+      fprintf(outf, "\t%d", _ratings.to_user_id(nu)-1);
+      fprintf(outf2, "\t%d", _ratings.to_user_id(nu)-1);
     }
     fprintf(outf, "\n");
+    fprintf(outf2, "\n");
   }
   fclose(outf);
 		     
 
-  // out-matrix: train, items
-  outf = fopen(Env::file_str("/out-train-items.dat").c_str(), "w");
+  // out-matrix: test, items
+  outf = fopen(Env::file_str("/out-test-items.dat").c_str(), "w");
   for (MovieMap::const_iterator i = _cold_start_docs.begin();
        i != _cold_start_docs.end(); ++i) {
     uint32_t nd = i->first;
-    fprintf(outf, "%d", _ratings.to_movie_id(nd));
     const vector<uint32_t> *users = _ratings.get_users(nd);
+    fprintf(outf, "%d\t%d", _ratings.to_movie_id(nd), users->size());
     
     for (uint32_t u = 0; u < users->size(); ++u) {
       uint32_t nu = (*users)[u];
       yval_t y = _ratings.r(nu,nd);
-      fprintf(outf, "\t%d:%d", _ratings.to_user_id(nu), y);
+      //fprintf(outf, "\t%d:%d", _ratings.to_user_id(nu), y);
+      fprintf(outf, "\t%d", _ratings.to_user_id(nu)-1);
     }
     fprintf(outf, "\n");
   }
   fclose(outf);
+  
+  // in-matrix & out-matrix: train, users
+  outf = fopen(Env::file_str("/in-train-users.dat").c_str(), "w");
+  outf2 = fopen(Env::file_str("/out-train-users.dat").c_str(), "w");
+  for (uint32_t nu = 0; nu < _nusers; ++nu) {
+    const vector<uint32_t> *docs = _ratings.get_movies(nu);
+    uint32_t x = 0;
+    for (uint32_t j = 0; j < docs->size(); ++j) {
+      uint32_t nd = (*docs)[j];
+      MovieMap::const_iterator mp = _cold_start_docs.find(nd);
+      if (mp != _cold_start_docs.end())
+	continue;
+      x++;
+    }
+    if (x == 0)
+      continue;   // all docs in cold start for this user; skip
+
+    fprintf(outf, "%d\t%d", _ratings.to_user_id(nu), x);
+    fprintf(outf2, "%d\t%d", _ratings.to_user_id(nu), x);
+    for (uint32_t j = 0; j < docs->size(); ++j) {
+      uint32_t nd = (*docs)[j];
+      MovieMap::const_iterator mp = _cold_start_docs.find(nd);
+      if (mp != _cold_start_docs.end())
+	continue;
+      //fprintf(outf, "\t%d:%d", _ratings.to_movie_id(nd), _ratings.r(nu,nd));
+      //fprintf(outf2, "\t%d:%d", _ratings.to_movie_id(nd), _ratings.r(nu,nd));
+      fprintf(outf, "\t%d", docID_to_chong_docID[_ratings.to_movie_id(nd)]);
+      fprintf(outf2, "\t%d", docID_to_chong_docID[_ratings.to_movie_id(nd)]);
+    }
+    fprintf(outf, "\n");
+    fprintf(outf2, "\n");
+  }
+  fclose(outf); 
+  fclose(outf2); 
+
 }
 
 void
