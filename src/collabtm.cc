@@ -673,9 +673,11 @@ CollabTM::batch_infer()
 	compute_likelihood(false);
       }
       save_model();
-      coldstart_rating_likelihood();
-      precision();
-      coldstart_precision();
+      if (_env.use_ratings) {
+	coldstart_rating_likelihood();
+	coldstart_precision();
+	precision();
+      }
     }
     
     if (_env.save_state_now)
