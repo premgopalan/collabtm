@@ -331,6 +331,9 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
   if (phased)
     sa << "-phased";
 
+  if (fixed_doc_param)
+    sa << "-fdp"; 
+
   prefix = sa.str();
   level = Logger::TEST;
 
@@ -364,7 +367,8 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
   plog("seq-init", seq_init);
   plog("seq-init-samples", seq_init_samples);
   plog("phased", phased);
-  
+  plog("fixed_doc_param", fixed_doc_param); 
+ 
   //string ndatfname = file_str("/network.dat");
   //unlink(ndatfname.c_str());
   //assert (symlink(datfname.c_str(), ndatfname.c_str()) >= 0);
