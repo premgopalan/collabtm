@@ -98,6 +98,7 @@ public:
   D1Array &operator*=(T);          // V * x
   D1Array &operator+=(const D1Array<T> &); // V + A
   D1Array &operator-=(const D1Array<T> &); // V - A
+  D1Array &operator=(const D1Array<T> &); // V = A
   T &operator[](uint32_t p);
   T operator[](uint32_t p) const;
 
@@ -119,7 +120,7 @@ template<class T> inline
 D1Array<T>::D1Array(uint32_t n, bool)
   :_n(n)
 {
-  _data = new T[n];
+  _data = new T[n]();
 }
 
 template<> inline
@@ -480,6 +481,17 @@ D1Array<T>::operator-=(const D1Array<T> &a)
     _data[i] -= d[i];
   return *this;
 }
+
+template<class T> inline D1Array<T> &
+D1Array<T>::operator=(const D1Array<T> &u)
+{
+  if(this==&u) return *this; 
+
+  for (uint32_t i = 0; i < _n; ++i)
+    _data[i] = u[i];
+  return *this;
+}
+
 
 template<class T> inline void
 sub(const D1Array<T> &a, const D1Array<T> &b, D1Array<T> &c)
