@@ -69,11 +69,11 @@ args <- commandArgs(trailingOnly=T)
 if (length(args) > 0) {
   ranks <- eval(parse(text=sprintf('c(%s)', args[1])))
 } else {
-  ranks <- c(100)
+  ranks <- c(200)
 }
 
 # compute precision and coverage, writing to separate data frames
-for (dataset in c("echonest", "nyt", "netflix", "mendeley", "netflix45")) {
+for (dataset in c("mendeley")) {
   # read user activity and item popularity
   users.file <- sprintf('../data/%s/users.tsv', dataset)
   users <- read.delim(users.file, sep='\t', header=F, col.names=c('user','activity'))
@@ -83,12 +83,7 @@ for (dataset in c("echonest", "nyt", "netflix", "mendeley", "netflix45")) {
   test.users <- read.delim(test.users.file, sep='\t', header=F, col.names=c('user','num.test.items'))
 
   # notes:
-  # netflix45 is implicit, where only ratings >= 4 are treated as (binary) observations
-  # netflix is explicit, where all rating values are modeled
-  #  the method here is "mf" instead of "mfpop", as no negative sampling is used,
-  #  so output/netflix/mf is symlinked to output/netflix/mfpop
-  # in both cases the test set involves prediction of ratings >= 4 (items users "like")
-  for (method in c("bpf.hier", "bpf", "lda", "nmf", "mfpop")) {
+  for (method in c("ctpf")) {
     for (K in ranks) {
       ranking.file <- sprintf('../output/%s/%s/ranking.tsv', dataset, method)
       prec.file <- sprintf('../output/%s/%s/precision.txt', dataset, method)
