@@ -326,6 +326,7 @@ CollabTM::load_validation_and_test_sets()
     fprintf(g, "%d\n", (*_cs_test_users)[i]);
   fflush(g);
   fclose(g);
+  Env::plog("cs test ratings size", _coldstart_test_map.size());
   Env::plog("cs total users size", _cs_users.size());
   Env::plog("cs test users size", cc);
 }
@@ -364,13 +365,13 @@ CollabTM::gen_ranking_for_users()
  
     // get and output rankings
     _save_ranking_file = true;
-    printf("precision: "); fflush(stdout);
-    //precision();
+    printf("precision\n"); fflush(stdout);
+    precision();
     printf("done\n");
-    printf("coldstart local inference and HOL: "); fflush(stdout);
+    printf("coldstart local inference and HOL\n"); fflush(stdout);
     coldstart_rating_likelihood();
     printf("done\n");
-    printf("coldstart precision: "); fflush(stdout);
+    printf("coldstart precision\n"); fflush(stdout);
     coldstart_precision();
     printf("done\n");
     printf("DONE writing ranking.tsv in output directory\n");
@@ -1714,7 +1715,6 @@ CollabTM::coldstart_precision()
   FILE *f = 0;
   if (_save_ranking_file)
     f = fopen(Env::file_str("/coldstart_ranking.tsv").c_str(), "w");
-  
   
   KVArray mlist(_ndocs);
   KVIArray ndcglist(_ndocs);
