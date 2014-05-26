@@ -299,6 +299,35 @@ CollabTM::load_validation_and_test_sets()
   FILE *g = fopen(Env::file_str("/coldstart_docs.tsv").c_str(), "w");
   write_coldstart_docs(g, _cold_start_docs);
   fclose(g);
+
+  // users with at least 1 coldstart test items
+  for (uint32_t nu = 0; nu < _nusers; ++nu) {
+    const vector<uint32_t> *docs = _ratings.get_movies(nu);
+
+    uint32_t x = 0;
+    for (uint32_t j = 0; j < docs->size(); ++j) {
+      uint32_t nd = (*docs)[j];
+      MovieMap::const_iterator mp = _cold_start_docs.find(nd);
+      if (mp != _cold_start_docs.end()) {
+	_cs_users.push_back(nu);
+	break;
+      }
+    }
+  }
+
+  _cs_test_users = new uArray(_cs_users.size());
+  for (uint32_t i = 0; i < _cs_users.size(); ++i)
+    (*_cs_test_users)[i] = _cs_users[i];
+  gsl_ran_shuffle(_r, (void *)&((*_cs_test_users)[0]), _cs_users.size(), sizeof(uint32_t));
+
+  g = fopen(Env::file_str("/coldstart_test_users.tsv").c_str(), "w");
+  uint32_t cc = 0;
+  for (uint32_t i = 0; i < _cs_users.size() && i < 10000; ++i, cc++)
+    fprintf(g, "%d\n", (*_cs_test_users)[i]);
+  fflush(g);
+  fclose(g);
+  Env::plog("cs total users size", _cs_users.size());
+  Env::plog("cs test users size", cc);
 }
 
 void
@@ -335,8 +364,14 @@ CollabTM::gen_ranking_for_users()
  
     // get and output rankings
     _save_ranking_file = true;
-    precision();
+    printf("precision: "); fflush(stdout);
+    //precision();
+    printf("done\n");
+    printf("coldstart local inference and HOL: "); fflush(stdout);
+    coldstart_rating_likelihood();
+    printf("coldstart precision: "); fflush(stdout);
     coldstart_precision();
+    printf("done\n");
     printf("DONE writing ranking.tsv in output directory\n");
 
     // get and output likelihood
@@ -601,7 +636,8 @@ CollabTM::batch_infer()
       }
     
     if (_env.use_docs && !_env.fixed_doc_param) {
-      
+
+      uint32_t processed_docs = 0;
       for (uint32_t nd = 0; nd < _ndocs; ++nd) {
 
 	MovieMap::const_iterator mp = _cold_start_docs.find(nd);
@@ -622,10 +658,16 @@ CollabTM::batch_infer()
 	  _theta.update_shape_next(nd, phi);
 	  _beta.update_shape_next(word, phi);
 	}
+
+	if (_iter == 0)
+	  processed_docs++;
       }
+      if (_iter == 0)
+	Env::plog("processed %d in-matrix docs in 1 iteration", processed_docs);
     }
     
     if (_env.use_ratings) {
+      uint32_t processed_ratings = 0;
       for (uint32_t nu = 0; nu < _nusers; ++nu) {
 
 	const vector<uint32_t> *docs = _ratings.get_movies(nu);
@@ -646,6 +688,7 @@ CollabTM::batch_infer()
 	  //continue;
 
 	  yval_t y = _ratings.r(nu,nd);
+	  processed_ratings++;
 	  
 	  assert (y > 0);
 	  
@@ -679,6 +722,8 @@ CollabTM::batch_infer()
 	  }
 	}
       }
+      if (_iter == 0)
+	Env::plog("processed %d in-matrix ratings in 1 iteration", processed_ratings);
     }
 
     if (_env.vb || (_env.vbinit && _iter < _env.vbinit_iter))
@@ -1534,8 +1579,9 @@ CollabTM::precision()
   
   KVArray mlist(_ndocs);
   KVIArray ndcglist(_ndocs);
+  uint32_t cc = 0;
   for (UserMap::const_iterator itr = _sampled_users.begin();
-          itr != _sampled_users.end(); ++itr) {
+       itr != _sampled_users.end(); ++itr, ++cc) {
       uint32_t n = itr->first;
 
       for (uint32_t m = 0; m < _ndocs; ++m) {
@@ -1642,6 +1688,8 @@ CollabTM::precision()
       //    n2,
       //    dcg10,
       //    dcg10_gt);
+      printf("\r%d", cc);
+      fflush(stdout);
   }
   if (_save_ranking_file)
     fclose(f);
@@ -1664,125 +1712,120 @@ CollabTM::coldstart_precision()
   uint32_t total_users = 0;
   FILE *f = 0;
   if (_save_ranking_file)
-    f = fopen(Env::file_str("/ranking.tsv").c_str(), "w");
+    f = fopen(Env::file_str("/coldstart_ranking.tsv").c_str(), "w");
   
-  if (!_save_ranking_file) {
-    _sampled_users.clear();
-    do {
-      uint32_t n = gsl_rng_uniform_int(_r, _nusers);
-      _sampled_users[n] = true;
-    } while (_sampled_users.size() < 1000 && _sampled_users.size() < _nusers / 2);
-  }
   
   KVArray mlist(_ndocs);
   KVIArray ndcglist(_ndocs);
-  for (UserMap::const_iterator itr = _sampled_users.begin();
-          itr != _sampled_users.end(); ++itr) {
-      uint32_t n = itr->first;
+  uint32_t cc = 0;  
+  for (uint32_t itr = 0; itr < _cs_test_users->size() && itr < 10000; itr++) {
+    uint32_t n =(*_cs_test_users)[itr];
+    
+    // now the items set consists of only those in the "coldstart" list
+    for (MovieMap::const_iterator i = _cold_start_docs.begin(); 
+	 i != _cold_start_docs.end(); ++i) {
+      uint32_t m = i->first;
+      Rating r(n,m);
+      //
+      // none of these ratings could have appeared in training
+      // so we rank all of them
+      //
+      double pred = coldstart_per_rating_prediction(n, m); 
+      mlist[m].first = m;
+      mlist[m].second = pred;
+      ndcglist[m].first = m;
+      CountMap::const_iterator itr = _coldstart_test_map.find(r);
+      if (itr != _coldstart_test_map.end()) {
+	ndcglist[m].second = itr->second;
+      } else { 
+	ndcglist[m].second = 0;
+      }
+    }
+    
+    uint32_t hits10 = 0, hits100 = 0;
+    double   dcg10 = .0, dcg100 = .0; 
+    uint32_t n2 = 0; 
+    mlist.sort_by_value();
+    for (uint32_t j = 0; j < mlist.size() && j < _topN_by_user; ++j) {
+      KV &kv = mlist[j];
+      uint32_t m = kv.first;
+      double pred = kv.second;
+      Rating r(n, m);
 
-      // now the items set consists of only those in the "coldstart" list
-      for (MovieMap::const_iterator i = _cold_start_docs.begin(); 
-	   i != _cold_start_docs.end(); ++i) {
-	uint32_t m = i->first;
-	Rating r(n,m);
-	//
-	// none of these ratings could have appeared in training
-	// so we rank all of them
-	//
-	double pred = per_rating_prediction(n, m); 
-	mlist[m].first = m;
-	mlist[m].second = pred;
-	ndcglist[m].first = m;
-	CountMap::const_iterator itr = _coldstart_test_map.find(r);
-	if (itr != _coldstart_test_map.end()) {
-	  ndcglist[m].second = itr->second;
-	} else { 
-	  ndcglist[m].second = 0;
+      uint32_t m2 = 0;
+      if (_save_ranking_file) {
+	IDMap::const_iterator it = _ratings.seq2user().find(n);
+	assert (it != _ratings.seq2user().end());
+
+	IDMap::const_iterator mt = _ratings.seq2movie().find(m);
+	if (mt == _ratings.seq2movie().end())
+	  continue;
+
+	m2 = mt->second;
+	n2 = it->second;
+      }
+
+      CountMap::const_iterator itr = _coldstart_test_map.find(r);
+      if (itr != _coldstart_test_map.end()) {
+	int v_ = itr->second;
+	int v = _ratings.rating_class(v_);
+	assert(v > 0);
+	if (_save_ranking_file) {
+	  if (_ratings.r(n, m) == .0) // skip training
+	    fprintf(f, "%d\t%d\t%.5f\t%d\n", n2, m2, pred, v);
+	}
+
+
+	if (j < 10) {
+	  hits10++;
+	  hits100++;
+	  dcg10 += (pow(2.,v_) - 1)/log(j+2);
+	  dcg100 += (pow(2.,v_) - 1)/log(j+2);
+	} else if (j < 100) {
+	  hits100++;
+	  dcg100 += (pow(2.,v_) - 1)/log(j+2);
+	}
+      } else {
+	if (_save_ranking_file) {
+	  if (_ratings.r(n, m) == .0) // skip training
+	    fprintf(f, "%d\t%d\t%.5f\t%d\n", n2, m2, pred, 0);
 	}
       }
+    }
+    mhits10 += (double)hits10 / 10;
+    mhits100 += (double)hits100 / 100;
+    total_users++;
 
-      uint32_t hits10 = 0, hits100 = 0;
-      double   dcg10 = .0, dcg100 = .0; 
-      uint32_t n2 = 0; 
-      mlist.sort_by_value();
-      for (uint32_t j = 0; j < mlist.size() && j < _topN_by_user; ++j) {
-          KV &kv = mlist[j];
-          uint32_t m = kv.first;
-          double pred = kv.second;
-          Rating r(n, m);
-
-          uint32_t m2 = 0;
-          if (_save_ranking_file) {
-              IDMap::const_iterator it = _ratings.seq2user().find(n);
-              assert (it != _ratings.seq2user().end());
-
-              IDMap::const_iterator mt = _ratings.seq2movie().find(m);
-              if (mt == _ratings.seq2movie().end())
-                  continue;
-
-              m2 = mt->second;
-              n2 = it->second;
-          }
-
-          CountMap::const_iterator itr = _coldstart_test_map.find(r);
-          if (itr != _coldstart_test_map.end()) {
-              int v_ = itr->second;
-              int v = _ratings.rating_class(v_);
-              assert(v > 0);
-              if (_save_ranking_file) {
-                  if (_ratings.r(n, m) == .0) // skip training
-                      fprintf(f, "%d\t%d\t%.5f\t%d\n", n2, m2, pred, v);
-              }
-
-
-              if (j < 10) {
-                  hits10++;
-                  hits100++;
-		  dcg10 += (pow(2.,v_) - 1)/log(j+2);
-		  dcg100 += (pow(2.,v_) - 1)/log(j+2);
-              } else if (j < 100) {
-                  hits100++;
-                  dcg100 += (pow(2.,v_) - 1)/log(j+2);
-              }
-          } else {
-              if (_save_ranking_file) {
-                  if (_ratings.r(n, m) == .0) // skip training
-                      fprintf(f, "%d\t%d\t%.5f\t%d\n", n2, m2, pred, 0);
-              }
-          }
+    // DCG normalizer
+    double dcg10_gt = 0, dcg100_gt = 0;
+    bool user_has_test_ratings = true; 
+    ndcglist.sort_by_value();
+    for (uint32_t j = 0; j < ndcglist.size() && j < _topN_by_user; ++j) {
+      int v = ndcglist[j].second; 
+      if(v==0) { // all subsequent docs are irrelevant
+	if(j==0)
+	  user_has_test_ratings = false; 
+	break;
       }
-      mhits10 += (double)hits10 / 10;
-      mhits100 += (double)hits100 / 100;
-      total_users++;
 
-      // DCG normalizer
-      double dcg10_gt = 0, dcg100_gt = 0;
-      bool user_has_test_ratings = true; 
-      ndcglist.sort_by_value();
-      for (uint32_t j = 0; j < ndcglist.size() && j < _topN_by_user; ++j) {
-          int v = ndcglist[j].second; 
-          if(v==0) { // all subsequent docs are irrelevant
-            if(j==0)
-                user_has_test_ratings = false; 
-            break;
-          }
-
-          if (j < 10) { 
-              dcg10_gt += (pow(2.,v) - 1)/log(j+2);
-              dcg100_gt += (pow(2.,v) - 1)/log(j+2);
-          } else if (j < 100) {
-              dcg100_gt += (pow(2.,v) - 1)/log(j+2);
-          }
+      if (j < 10) { 
+	dcg10_gt += (pow(2.,v) - 1)/log(j+2);
+	dcg100_gt += (pow(2.,v) - 1)/log(j+2);
+      } else if (j < 100) {
+	dcg100_gt += (pow(2.,v) - 1)/log(j+2);
       }
-      if(user_has_test_ratings) { 
-          cumndcg10 += dcg10/dcg10_gt;
-          cumndcg100 += dcg100/dcg100_gt;
-      } 
-      //fprintf(_df, "%d (n2=%d): %.5f\t%.5f\n", 
-      //    n,
-      //    n2,
-      //    dcg10,
-      //    dcg10_gt);
+    }
+    if(user_has_test_ratings) { 
+      cumndcg10 += dcg10/dcg10_gt;
+      cumndcg100 += dcg100/dcg100_gt;
+    } 
+    //fprintf(_df, "%d (n2=%d): %.5f\t%.5f\n", 
+    //    n,
+    //    n2,
+    //    dcg10,
+    //    dcg10_gt);
+    printf("\r%d", cc);
+    fflush(stdout);
   }
   if (_save_ranking_file)
     fclose(f);
@@ -1895,6 +1938,7 @@ CollabTM::coldstart_local_inference()
   _cstheta.set_to_prior();
   _cstheta.set_to_prior_curr();
 
+  uint32_t processed_docs = 0;
   for (MovieMap::const_iterator i = _cold_start_docs.begin(); 
        i != _cold_start_docs.end(); ++i) {
     uint32_t doc = i->first;
@@ -1917,7 +1961,9 @@ CollabTM::coldstart_local_inference()
       _cstheta.update_shape_next(docseq, phi);
       _beta.update_shape_next(word, phi);
     }
+    processed_docs++;
   }
+  Env::plog("processed %d cold-start docs", processed_docs);
 
   Array betasum(_k);
   _beta.sum_rows(betasum);

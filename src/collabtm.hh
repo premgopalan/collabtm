@@ -102,8 +102,10 @@ private:
   CountMap _test_map;
   CountMap _coldstart_test_map;
   MovieMap _cold_start_docs;
+  vector<uint32_t> _cs_users;
   UserMap _sampled_users;
   UserMap _sampled_movies;
+  uArray *_cs_test_users;
 
   // coldstart docs sequence ids
   uint32_t _ncsdoc_seq;
