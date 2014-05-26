@@ -351,6 +351,8 @@ CollabTM::gen_ranking_for_users()
 void
 CollabTM::write_mult_format()
 {
+  // output stats
+
   // out-matrix: test, users
   FILE * outf = fopen(Env::file_str("/out-test-users.dat").c_str(), "w");
   for (uint32_t nu = 0; nu < _nusers; ++nu) {
