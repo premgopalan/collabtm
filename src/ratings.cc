@@ -125,7 +125,6 @@ Ratings::read_generic(FILE *f, CountMap *cmap)
   return 0;
 }
 
-
 int
 Ratings::read_nyt_train(FILE *f, CountMap *cmap)
 {

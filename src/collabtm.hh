@@ -8,10 +8,12 @@
 class CollabTM {
 public:
   CollabTM(Env &env, Ratings &ratings);
-  ~CollabTM() { fclose(_af); }
+  ~CollabTM();
   
   void batch_infer();
   void online_infer(); 
+  void write_mult_format();
+
   void gen_ranking_for_users(); 
   void ppc();
 
@@ -20,6 +22,8 @@ private:
   void initialize_perturb_betas();
   void approx_log_likelihood();
   void precision(); 
+  void coldstart_precision();
+
   void get_phi(GPBase<Matrix> &a, uint32_t ai, 
 	       GPBase<Matrix> &b, uint32_t bi, 
 	       Array &phi);
@@ -43,14 +47,20 @@ private:
   void save_item_state(string s, const Matrix &mat);
   void save_state(string s, const Array &mat);
   bool compute_likelihood(bool validation);
-  double per_rating_likelihood(uint32_t user, uint32_t doc, yval_t y) const;
+  double per_rating_likelihood(uint32_t user, uint32_t doc, yval_t y, 
+			       bool coldstart=false) const;
   double per_rating_prediction(uint32_t user, uint32_t doc) const;
 
-  double coldstart_ratings_likelihood(uint32_t user, uint32_t doc) const;
   uint32_t duration() const;
-  bool rating_ok(const Rating &r) const;
+  bool is_training(const Rating &r) const;
   uint32_t factorial(uint32_t n)  const;
   double log_factorial(uint32_t n)  const;
+
+  double coldstart_local_inference();
+  double coldstart_rating_likelihood();
+  double coldstart_per_rating_prediction(uint32_t user, uint32_t doc) const;
+
+  bool is_validation(const Rating &r) const;
 
   Env &_env;
   Ratings &_ratings;
@@ -70,6 +80,7 @@ private:
   GPMatrixGR _x;
   GPMatrix _epsilon;
   GPArray _a;
+  GPMatrix _cstheta; // coldstart docs
 
   uint32_t _start_time;
   gsl_rng *_r;
@@ -77,7 +88,11 @@ private:
   FILE *_vf;
   FILE *_tf;
   FILE *_pf;
+  FILE *_cs_pf;
   FILE *_df;
+  FILE *_cs_df;
+  FILE *_cs_tf;
+  FILE *_cs_tf2;
   double _prev_h;
   uint32_t _nh;
   bool _save_ranking_file;
@@ -85,11 +100,29 @@ private:
 
   CountMap _validation_map;  
   CountMap _test_map;
+  CountMap _coldstart_test_map;
   MovieMap _cold_start_docs;
   UserMap _sampled_users;
   UserMap _sampled_movies;
 
+  // coldstart docs sequence ids
+  uint32_t _ncsdoc_seq;
+  IDMap _doc_to_cs_idmap;
 };
+
+inline
+CollabTM::~CollabTM()
+{
+  fclose(_af);
+  fclose(_vf);
+  fclose(_tf);
+  fclose(_pf);
+  fclose(_df);
+  fclose(_cs_tf);
+  fclose(_cs_tf2);
+  fclose(_cs_pf);
+  fclose(_cs_df);
+}
 
 inline uint32_t
 CollabTM::duration() const
@@ -99,9 +132,13 @@ CollabTM::duration() const
 }
 
 inline bool
-CollabTM::rating_ok(const Rating &r) const
+CollabTM::is_training(const Rating &r) const
 {
   assert (r.first  < _nusers && r.second < _ndocs);
+
+  MovieMap::const_iterator mp = _cold_start_docs.find(r.second);
+  if (mp != _cold_start_docs.end())
+    return false;
   const CountMap::const_iterator u = _test_map.find(r);
   if (u != _test_map.end())
     return false;
@@ -109,6 +146,16 @@ CollabTM::rating_ok(const Rating &r) const
   if (w != _validation_map.end())
     return false;
   return true;
+}
+
+inline bool
+CollabTM::is_validation(const Rating &r) const
+{
+  assert (r.first  < _nusers && r.second < _ndocs);
+  CountMap::const_iterator itr = _validation_map.find(r);
+  if (itr != _validation_map.end())
+    return true;
+  return false;
 }
 
 

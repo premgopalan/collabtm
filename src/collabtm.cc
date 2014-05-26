@@ -11,7 +11,6 @@ CollabTM::CollabTM(Env &env, Ratings &ratings)
     _tau0(1024), _kappa(.5),
     _userc(_nusers),
     _wordc(_nvocab),
-
     _iter(0),
     _start_time(time(0)),
     _theta("theta", 0.3, 0.3, _ndocs,_k,&_r),
@@ -19,9 +18,11 @@ CollabTM::CollabTM(Env &env, Ratings &ratings)
     _x("x", 0.3, 0.3, _nusers,_k,&_r),
     _epsilon("epsilon", 0.3, 0.3, _ndocs,_k,&_r),
     _a("a", 0.3, 0.3, _ndocs, &_r),
+    _cstheta("cstheta", 0.3, 0.3, _ndocs,_k,&_r),
     _prev_h(.0), _nh(0),
     _save_ranking_file(false),
-    _topN_by_user(100)
+    _topN_by_user(100),
+    _ncsdoc_seq(0)
 {
   gsl_rng_env_setup();
   const gsl_rng_type *T = gsl_rng_default;
@@ -41,6 +42,16 @@ CollabTM::CollabTM(Env &env, Ratings &ratings)
     printf("cannot open heldout file:%s\n",  strerror(errno));
     exit(-1);
   }
+  _cs_tf = fopen(Env::file_str("/coldstart_test.txt").c_str(), "w");
+  if (!_cs_tf)  {
+    printf("cannot open heldout file:%s\n",  strerror(errno));
+    exit(-1);
+  }
+  _cs_tf2 = fopen(Env::file_str("/coldstart_test_perdoc.txt").c_str(), "w");
+  if (!_cs_tf2)  {
+    printf("cannot open heldout file:%s\n",  strerror(errno));
+    exit(-1);
+  }
   _tf = fopen(Env::file_str("/test.txt").c_str(), "w");
   if (!_tf)  {
     printf("cannot open heldout file:%s\n",  strerror(errno));
@@ -51,8 +62,18 @@ CollabTM::CollabTM(Env &env, Ratings &ratings)
     printf("cannot open logl file:%s\n",  strerror(errno));
     exit(-1);
   }
+  _cs_pf = fopen(Env::file_str("/coldstart_precision.txt").c_str(), "w");
+  if (!_cs_pf)  {
+    printf("cannot open logl file:%s\n",  strerror(errno));
+    exit(-1);
+  }
   _df = fopen(Env::file_str("/ndcg.txt").c_str(), "w");
   if (!_df)  {
+    printf("cannot open logl file:%s\n",  strerror(errno));
+    exit(-1);
+  }
+  _cs_df = fopen(Env::file_str("/coldstart_ndcg.txt").c_str(), "w");
+  if (!_cs_df)  {
     printf("cannot open logl file:%s\n",  strerror(errno));
     exit(-1);
   }
@@ -238,11 +259,20 @@ CollabTM::load_validation_and_test_sets()
   }
   Env::plog("number of heldout cold start docs", _cold_start_docs.size());
 
+  // create sequence ids for cold start docs
+  _ncsdoc_seq = 0;
+  for (MovieMap::const_iterator i = _cold_start_docs.begin(); 
+       i != _cold_start_docs.end(); ++i) {
+    _doc_to_cs_idmap[i->first] = _ncsdoc_seq++;
+  }
+
   CountMap::iterator i = _test_map.begin(); 
   while (i != _test_map.end()) {
     const Rating &r = i->first;
     MovieMap::const_iterator itr = _cold_start_docs.find(r.second);
     if (itr != _cold_start_docs.end()) {
+      // insert into coldstart test map
+      _coldstart_test_map[r] = i->second;
       debug("test: erasing rating r (%d,%d) in heldout cold start", 
 	    _ratings.to_user_id(r.first), 
 	    _ratings.to_movie_id(r.second));
@@ -276,9 +306,7 @@ CollabTM::write_coldstart_docs(FILE *f, MovieMap &mp)
 {
   for (MovieMap::const_iterator i = mp.begin(); i != mp.end(); ++i) {
     uint32_t p = i->first;
-    const IDMap &movies = _ratings.seq2movie();
-    IDMap::const_iterator mi = movies.find(p);
-    fprintf(f, "%d\t%d\n", p, mi->second);
+    fprintf(f, "%d\t%d\n", p, _ratings.to_movie_id(p));
   }
   fflush(f);
 }
@@ -308,6 +336,7 @@ CollabTM::gen_ranking_for_users()
     // get and output rankings
     _save_ranking_file = true;
     precision();
+    coldstart_precision();
     printf("DONE writing ranking.tsv in output directory\n");
 
     // get and output likelihood
@@ -317,6 +346,106 @@ CollabTM::gen_ranking_for_users()
         save_model();
         exit(0);
     }
+}
+
+void
+CollabTM::write_mult_format()
+{
+  // in-matrix: train, users
+  FILE *outf = fopen(Env::file_str("/in-train-users.dat").c_str(), "w");
+  for (uint32_t nu = 0; nu < _nusers; ++nu) {
+    const vector<uint32_t> *docs = _ratings.get_movies(nu);
+    uint32_t x = 0;
+    for (uint32_t j = 0; j < docs->size(); ++j) {
+      uint32_t nd = (*docs)[j];
+      MovieMap::const_iterator mp = _cold_start_docs.find(nd);
+      if (mp != _cold_start_docs.end())
+	continue;
+      x++;
+    }
+    if (x == 0)
+      continue;   // all docs in cold start for this user; skip
+
+    fprintf(outf, "%d", _ratings.to_user_id(nu));
+    for (uint32_t j = 0; j < docs->size(); ++j) {
+      uint32_t nd = (*docs)[j];
+      MovieMap::const_iterator mp = _cold_start_docs.find(nd);
+      if (mp != _cold_start_docs.end())
+	continue;
+      fprintf(outf, "\t%d:%d", _ratings.to_movie_id(nd), _ratings.r(nu,nd));
+    }
+    fprintf(outf, "\n");
+  }
+  fclose(outf);
+
+  // out-matrix: train, users
+  outf = fopen(Env::file_str("/out-train-users.dat").c_str(), "w");
+  for (uint32_t nu = 0; nu < _nusers; ++nu) {
+    const vector<uint32_t> *docs = _ratings.get_movies(nu);
+
+    uint32_t x = 0;
+    for (uint32_t j = 0; j < docs->size(); ++j) {
+      uint32_t nd = (*docs)[j];
+      MovieMap::const_iterator mp = _cold_start_docs.find(nd);
+      if (mp == _cold_start_docs.end())
+	continue;
+      x++;
+    }
+    if (x == 0)
+      continue;   // no docs in cold start for this user; skip
+
+    fprintf(outf, "%d", _ratings.to_user_id(nu));
+    for (uint32_t j = 0; j < docs->size(); ++j) {
+      uint32_t nd = (*docs)[j];
+      
+      MovieMap::const_iterator mp = _cold_start_docs.find(nd);
+      if (mp == _cold_start_docs.end())
+	continue;
+
+      fprintf(outf, "\t%d:%d", _ratings.to_movie_id(nd), _ratings.r(nu,nd));
+    }
+    fprintf(outf, "\n");
+  }
+  fclose(outf);
+
+  // in-matrix: train, items
+  outf = fopen(Env::file_str("/in-train-items.dat").c_str(), "w");
+  for (uint32_t nd = 0; nd < _ndocs; ++nd) {
+    MovieMap::const_iterator mp = _cold_start_docs.find(nd);
+    if (mp != _cold_start_docs.end())
+      continue; // a cold start doc, skip
+
+    const vector<uint32_t> *users = _ratings.get_users(nd);
+    if (users->size() == 0)
+      continue;
+    
+    fprintf(outf, "%d", _ratings.to_movie_id(nd));
+    for (uint32_t j = 0; j < users->size(); ++j) {
+      uint32_t nu = (*users)[j];
+      yval_t y = _ratings.r(nu,nd);
+      fprintf(outf, "\t%d:%d", _ratings.to_user_id(nu), y);
+    }
+    fprintf(outf, "\n");
+  }
+  fclose(outf);
+		     
+
+  // out-matrix: train, items
+  outf = fopen(Env::file_str("/out-train-items.dat").c_str(), "w");
+  for (MovieMap::const_iterator i = _cold_start_docs.begin();
+       i != _cold_start_docs.end(); ++i) {
+    uint32_t nd = i->first;
+    fprintf(outf, "%d", _ratings.to_movie_id(nd));
+    const vector<uint32_t> *users = _ratings.get_users(nd);
+    
+    for (uint32_t u = 0; u < users->size(); ++u) {
+      uint32_t nu = (*users)[u];
+      yval_t y = _ratings.r(nu,nd);
+      fprintf(outf, "\t%d:%d", _ratings.to_user_id(nu), y);
+    }
+    fprintf(outf, "\n");
+  }
+  fclose(outf);
 }
 
 void
@@ -425,6 +554,8 @@ CollabTM::batch_infer()
     seq_init();
   }
   
+  lerr("within batch infer");
+
   approx_log_likelihood();
 
   Array phi(_k);
@@ -481,6 +612,15 @@ CollabTM::batch_infer()
 	  if (mp != _cold_start_docs.end() && mp->second == true)
 	    continue;
 
+	  //
+	  // NOTE: we don't need to check this because test, validation ratings
+	  // are not included the lists maintained in the Ratings class
+	  // *and* since we don't iterate over zero ratings
+	  //
+	  //Rating r(nu,nd);
+	  //if (!is_training(r))
+	  //continue;
+
 	  yval_t y = _ratings.r(nu,nd);
 	  
 	  assert (y > 0);
@@ -533,6 +673,9 @@ CollabTM::batch_infer()
 	compute_likelihood(false);
       }
       save_model();
+      coldstart_rating_likelihood();
+      precision();
+      coldstart_precision();
     }
     
     if (_env.save_state_now)
@@ -1370,24 +1513,25 @@ CollabTM::precision()
       uint32_t n = itr->first;
 
       for (uint32_t m = 0; m < _ndocs; ++m) {
-          if (_ratings.r(n,m) > 0) { // skip training
-              mlist[m].first = m;
-              mlist[m].second = .0;
-              ndcglist[m].first = m;
-              ndcglist[m].second = 0;
-              continue;
-          }
-          double pred = per_rating_prediction(n, m); 
-          mlist[m].first = m;
-          mlist[m].second = pred;
-          Rating r(n,m); 
-          ndcglist[m].first = m;
-          CountMap::const_iterator itr = _test_map.find(r);
-          if (itr != _test_map.end()) {
-              ndcglist[m].second = itr->second;
-          } else { 
-              ndcglist[m].second = 0;
-          }
+	Rating r(n,m);
+	if (_ratings.r(n,m) > 0 || is_validation(r)) { // skip training
+	  mlist[m].first = m;
+	  mlist[m].second = .0;
+	  ndcglist[m].first = m;
+	  ndcglist[m].second = 0;
+	  continue;
+	}
+	
+	double pred = per_rating_prediction(n, m); 
+	mlist[m].first = m;
+	mlist[m].second = pred;
+	ndcglist[m].first = m;
+	CountMap::const_iterator itr = _test_map.find(r);
+	if (itr != _test_map.end()) {
+	  ndcglist[m].second = itr->second;
+	} else { 
+	  ndcglist[m].second = 0;
+	}
       }
 
       uint32_t hits10 = 0, hits100 = 0;
@@ -1427,8 +1571,8 @@ CollabTM::precision()
               if (j < 10) {
                   hits10++;
                   hits100++;
-                  dcg10 += (pow(2.,v_) - 1)/log(j+2);
-                  dcg100 += (pow(2.,v_) - 1)/log(j+2);
+		  dcg10 += (pow(2.,v_) - 1)/log(j+2);
+		  dcg100 += (pow(2.,v_) - 1)/log(j+2);
               } else if (j < 100) {
                   hits100++;
                   dcg100 += (pow(2.,v_) - 1)/log(j+2);
@@ -1485,6 +1629,148 @@ CollabTM::precision()
   fflush(_df);
 }
 
+
+void
+CollabTM::coldstart_precision()
+{ 
+  double mhits10 = 0, mhits100 = 0;
+  double cumndcg10 = 0, cumndcg100 = 0;
+  uint32_t total_users = 0;
+  FILE *f = 0;
+  if (_save_ranking_file)
+    f = fopen(Env::file_str("/ranking.tsv").c_str(), "w");
+  
+  if (!_save_ranking_file) {
+    _sampled_users.clear();
+    do {
+      uint32_t n = gsl_rng_uniform_int(_r, _nusers);
+      _sampled_users[n] = true;
+    } while (_sampled_users.size() < 1000 && _sampled_users.size() < _nusers / 2);
+  }
+  
+  KVArray mlist(_ndocs);
+  KVIArray ndcglist(_ndocs);
+  for (UserMap::const_iterator itr = _sampled_users.begin();
+          itr != _sampled_users.end(); ++itr) {
+      uint32_t n = itr->first;
+
+      // now the items set consists of only those in the "coldstart" list
+      for (MovieMap::const_iterator i = _cold_start_docs.begin(); 
+	   i != _cold_start_docs.end(); ++i) {
+	uint32_t m = i->first;
+	Rating r(n,m);
+	//
+	// none of these ratings could have appeared in training
+	// so we rank all of them
+	//
+	double pred = per_rating_prediction(n, m); 
+	mlist[m].first = m;
+	mlist[m].second = pred;
+	ndcglist[m].first = m;
+	CountMap::const_iterator itr = _coldstart_test_map.find(r);
+	if (itr != _coldstart_test_map.end()) {
+	  ndcglist[m].second = itr->second;
+	} else { 
+	  ndcglist[m].second = 0;
+	}
+      }
+
+      uint32_t hits10 = 0, hits100 = 0;
+      double   dcg10 = .0, dcg100 = .0; 
+      uint32_t n2 = 0; 
+      mlist.sort_by_value();
+      for (uint32_t j = 0; j < mlist.size() && j < _topN_by_user; ++j) {
+          KV &kv = mlist[j];
+          uint32_t m = kv.first;
+          double pred = kv.second;
+          Rating r(n, m);
+
+          uint32_t m2 = 0;
+          if (_save_ranking_file) {
+              IDMap::const_iterator it = _ratings.seq2user().find(n);
+              assert (it != _ratings.seq2user().end());
+
+              IDMap::const_iterator mt = _ratings.seq2movie().find(m);
+              if (mt == _ratings.seq2movie().end())
+                  continue;
+
+              m2 = mt->second;
+              n2 = it->second;
+          }
+
+          CountMap::const_iterator itr = _coldstart_test_map.find(r);
+          if (itr != _coldstart_test_map.end()) {
+              int v_ = itr->second;
+              int v = _ratings.rating_class(v_);
+              assert(v > 0);
+              if (_save_ranking_file) {
+                  if (_ratings.r(n, m) == .0) // skip training
+                      fprintf(f, "%d\t%d\t%.5f\t%d\n", n2, m2, pred, v);
+              }
+
+
+              if (j < 10) {
+                  hits10++;
+                  hits100++;
+		  dcg10 += (pow(2.,v_) - 1)/log(j+2);
+		  dcg100 += (pow(2.,v_) - 1)/log(j+2);
+              } else if (j < 100) {
+                  hits100++;
+                  dcg100 += (pow(2.,v_) - 1)/log(j+2);
+              }
+          } else {
+              if (_save_ranking_file) {
+                  if (_ratings.r(n, m) == .0) // skip training
+                      fprintf(f, "%d\t%d\t%.5f\t%d\n", n2, m2, pred, 0);
+              }
+          }
+      }
+      mhits10 += (double)hits10 / 10;
+      mhits100 += (double)hits100 / 100;
+      total_users++;
+
+      // DCG normalizer
+      double dcg10_gt = 0, dcg100_gt = 0;
+      bool user_has_test_ratings = true; 
+      ndcglist.sort_by_value();
+      for (uint32_t j = 0; j < ndcglist.size() && j < _topN_by_user; ++j) {
+          int v = ndcglist[j].second; 
+          if(v==0) { // all subsequent docs are irrelevant
+            if(j==0)
+                user_has_test_ratings = false; 
+            break;
+          }
+
+          if (j < 10) { 
+              dcg10_gt += (pow(2.,v) - 1)/log(j+2);
+              dcg100_gt += (pow(2.,v) - 1)/log(j+2);
+          } else if (j < 100) {
+              dcg100_gt += (pow(2.,v) - 1)/log(j+2);
+          }
+      }
+      if(user_has_test_ratings) { 
+          cumndcg10 += dcg10/dcg10_gt;
+          cumndcg100 += dcg100/dcg100_gt;
+      } 
+      //fprintf(_df, "%d (n2=%d): %.5f\t%.5f\n", 
+      //    n,
+      //    n2,
+      //    dcg10,
+      //    dcg10_gt);
+  }
+  if (_save_ranking_file)
+    fclose(f);
+  fprintf(_cs_pf, "%.5f\t%.5f\n", 
+  	  mhits10 / total_users, 
+  	  mhits100 / total_users);
+  fflush(_cs_pf);
+  fprintf(_cs_df, "%.5f\t%.5f\n", 
+  	  cumndcg10 / total_users, 
+  	  cumndcg100 / total_users);
+  fflush(_cs_df);
+}
+
+
 double
 CollabTM::per_rating_prediction(uint32_t user, uint32_t doc) const
 {
@@ -1517,13 +1803,38 @@ CollabTM::per_rating_prediction(uint32_t user, uint32_t doc) const
   return s;
 }
 
+double
+CollabTM::coldstart_per_rating_prediction(uint32_t user, uint32_t doc) const
+{
+  assert (_env.fixeda);
+  const double ** etheta = _cstheta.expected_v().const_data();
+  const double ** ex = _x.expected_v().const_data();
+  const double ** eepsilon = _epsilon.expected_v().const_data();
+  
+  IDMap::const_iterator itr = _doc_to_cs_idmap.find(doc);
+  assert (itr != _doc_to_cs_idmap.end());
+  uint32_t docseq = itr->second;
+  
+  double s = .0;
+  double item_contrib = 0;
+  for (uint32_t k = 0; k < _k; ++k) {
+    item_contrib = (etheta[docseq][k] + eepsilon[doc][k]);
+    s += item_contrib * ex[user][k];
+  }
+  if (s < 1e-30)
+    s = 1e-30;
+  return s;
+}
+
 
 double
-CollabTM::per_rating_likelihood(uint32_t user, uint32_t doc, yval_t y) const
+CollabTM::per_rating_likelihood(uint32_t user, uint32_t doc, yval_t y, 
+				bool coldstart) const
 {
   assert (_env.use_ratings);
 
-  double s = per_rating_prediction(user, doc); 
+  double s = coldstart? coldstart_per_rating_prediction(user, doc) : 
+    per_rating_prediction(user, doc); 
   info("%d, %d, s = %f, f(y) = %ld\n", p, q, s, factorial(y));
   
   double v = .0;
@@ -1552,7 +1863,88 @@ CollabTM::log_factorial(uint32_t n)  const
 } 
 
 double
-CollabTM::coldstart_ratings_likelihood(uint32_t user, uint32_t doc) const
+CollabTM::coldstart_local_inference()
 {
-  // XXX
+  // keep _beta fixed and compute theta for coldstart docs
+  _cstheta.set_to_prior();
+  _cstheta.set_to_prior_curr();
+
+  for (MovieMap::const_iterator i = _cold_start_docs.begin(); 
+       i != _cold_start_docs.end(); ++i) {
+    uint32_t doc = i->first;
+    
+    assert (_doc_to_cs_idmap.find(doc) != _doc_to_cs_idmap.end());
+    uint32_t docseq = _doc_to_cs_idmap[doc];
+    
+    Array phi(_k);
+    const WordVec *w = _ratings.get_words(doc);
+    for (uint32_t nw = 0; w && nw < w->size(); nw++) {
+      WordCount p = (*w)[nw];
+      uint32_t word = p.first;
+      uint32_t count = p.second;
+      
+      get_phi(_cstheta, docseq, _beta, word, phi);
+      
+      if (count > 1)
+	phi.scale(count);
+      
+      _cstheta.update_shape_next(docseq, phi);
+      _beta.update_shape_next(word, phi);
+    }
+  }
+
+  Array betasum(_k);
+  _beta.sum_rows(betasum);
+  _cstheta.update_rate_next(betasum);
+  _cstheta.swap();
+  _cstheta.compute_expectations();
+
+  // save it
+  _cstheta.save_state(_ratings.seq2movie());
+}
+
+double
+CollabTM::coldstart_rating_likelihood()
+{
+  lerr("computing coldstart local thetas");
+  coldstart_local_inference();
+  
+  lerr("computing coldstart rating likelihood");
+  // compute likelihood of "heldout" ratings
+  // ALL ratings for a coldstart document are heldout
+
+  double s = .0;
+  uint32_t k = 0;
+  for (MovieMap::const_iterator i = _cold_start_docs.begin(); 
+       i != _cold_start_docs.end(); ++i) {
+    double ss = .0;
+    uint32_t kk = 0;
+    uint32_t nd = i->first;
+    const vector<uint32_t> *users = _ratings.get_users(nd);
+
+    // need this to access _cstheta
+    assert (_doc_to_cs_idmap.find(nd) != _doc_to_cs_idmap.end());
+    uint32_t docseq = _doc_to_cs_idmap[nd];
+    debug("heldout doc %d seq %d", nd, docseq);
+    
+    for (uint32_t u = 0; u < users->size(); ++u) {
+      uint32_t nu = (*users)[u];
+      yval_t y = _ratings.r(nu,nd);
+      assert (y > 0);
+
+      // note: need docseq whenever looking up "cstheta"
+      double u = per_rating_likelihood(nu, nd, y, true);
+      s += u;
+      k += 1;
+      ss += u;
+      kk += 1;
+    }
+    
+    fprintf(_cs_tf2, "%d\t%d\t%.9f\t%d\n", nd, docseq, ss / kk, kk);
+    fflush(_cs_tf2);
+  }
+  
+  fprintf(_cs_tf, "%d\t%d\t%.9f\t%d\n", _iter, duration(), s / k, k);
+  fflush(_cs_tf);
+  lerr("computing coldstart likelihood done");
 }

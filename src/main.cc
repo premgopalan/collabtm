@@ -86,6 +86,7 @@ main(int argc, char **argv)
   bool seq_init_samples = false;
   bool fixed_doc_param = false;
   bool phased = false;
+  bool to_mult = false;
 
   uint32_t i = 0;
   while (i <= argc - 1) {
@@ -193,6 +194,8 @@ main(int argc, char **argv)
       fixed_doc_param = true;
     } else if (strcmp(argv[i], "-phased") == 0) {
       phased = true;
+    } else if (strcmp(argv[i], "-to-mult") == 0) {
+      to_mult = true;
     } else if (i > 0) {
       fprintf(stdout,  "error: unknown option %s\n", argv[i]);
       assert(0);
@@ -226,11 +229,12 @@ main(int argc, char **argv)
   
   if (!ppc) {
     CollabTM collabtm(env, ratings);
-    if (batch) { 
-        collabtm.batch_infer();
-    } else {
-        collabtm.online_infer(); // stochastic inference
-    }
+    if (to_mult)
+      collabtm.write_mult_format();
+    else if (batch)
+      collabtm.batch_infer();
+    else
+      collabtm.online_infer(); // stochastic inference
 
   } else {
     CollabTM collabtm(env, ratings);
