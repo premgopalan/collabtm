@@ -326,6 +326,16 @@ CollabTM::load_validation_and_test_sets()
     fprintf(g, "%d\n", (*_cs_test_users)[i]);
   fflush(g);
   fclose(g);
+
+  g = fopen(Env::file_str("/coldstart_test.tsv").c_str(), "w");
+  for (CountMap::const_iterator itr = _coldstart_test_map.begin(); 
+       itr != _coldstart_test_map.end(); ++itr) {
+    const Rating &r = itr->first;
+    yval_t v = itr->second;
+    fprintf(g, "%d\t%d\t%d\n", r.first, r.second, v);
+  }
+  fclose(g);
+
   Env::plog("cs test ratings size", _coldstart_test_map.size());
   Env::plog("cs total users size", _cs_users.size());
   Env::plog("cs test users size", cc);
