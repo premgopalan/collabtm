@@ -229,7 +229,9 @@ main(int argc, char **argv)
   
   if (!ppc) {
     CollabTM collabtm(env, ratings);
-    if (to_mult)
+    if (gen_ranking_for_users)
+      collabtm.gen_ranking_for_users();
+    else if (to_mult)
       collabtm.write_mult_format();
     else if (batch)
       collabtm.batch_infer();
