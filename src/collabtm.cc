@@ -323,7 +323,7 @@ CollabTM::load_validation_and_test_sets()
   g = fopen(Env::file_str("/coldstart_test_users.tsv").c_str(), "w");
   uint32_t cc = 0;
   for (uint32_t i = 0; i < _cs_users.size() && i < 10000; ++i, cc++)
-    fprintf(g, "%d\n", (*_cs_test_users)[i]);
+    fprintf(g, "%d\n", _ratings.to_user_id((*_cs_test_users)[i]));
   fflush(g);
   fclose(g);
 
