@@ -5,7 +5,7 @@ require(scales)
 
 theme_set(theme_bw())
 
-methods <- c("CTPF")
+methods <- c("CTR-CS", "CTPF-CS")
 datasets <- c("mendeley"="Mendeley")
 
 ########################################
@@ -102,7 +102,7 @@ for (dataset in names(datasets)) {
 
   # notes:
 
-  for (method in c("ctpf")) {
+  for (method in c("ctr-cs", "ctpf-cs")) {
       tsv <- sprintf('../output/%s/%s/precision.txt', dataset, method)
       if (file.exists(tsv)) {
         print(tsv)
