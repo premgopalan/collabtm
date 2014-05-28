@@ -398,12 +398,15 @@ CollabTM::gen_ranking_for_users()
 void
 CollabTM::write_mult_format()
 {
-  // output stats
+  FreqMap userID_to_chong_userID; 
 
   // out-matrix: test, users
   FILE * outf = fopen(Env::file_str("/out-test.dat").c_str(), "w");
   for (uint32_t nu = 0; nu < _nusers; ++nu) {
     const vector<uint32_t> *docs = _ratings.get_movies(nu);
+
+	uint32_t s = userID_to_chong_userID.size();
+	userID_to_chong_userID[_ratings.to_user_id(nu)] = s;
 
 //    uint32_t x = 0;
 //    for (uint32_t j = 0; j < docs->size(); ++j) {
@@ -432,7 +435,7 @@ CollabTM::write_mult_format()
   // in-matrix & out-matrix: train, items
   outf = fopen(Env::file_str("/in-train-items.dat").c_str(), "w");
   FILE *outf2 = fopen(Env::file_str("/out-train-items.dat").c_str(), "w");
-  FreqMap docID_to_chong_docID; // mapping of docIDs to
+  FreqMap docID_to_chong_docID; // mapping of external IDs to dat-format IDs
   for (uint32_t nd = 0; nd < _ndocs; ++nd) {
     MovieMap::const_iterator mp = _cold_start_docs.find(nd);
     if (mp != _cold_start_docs.end()) { 
@@ -452,8 +455,8 @@ CollabTM::write_mult_format()
     for (uint32_t j = 0; j < users->size(); ++j) {
       uint32_t nu = (*users)[j];
       yval_t y = _ratings.r(nu,nd);
-      fprintf(outf, "\t%d", _ratings.to_user_id(nu)-1);
-      fprintf(outf2, "\t%d", _ratings.to_user_id(nu)-1);
+      fprintf(outf, "\t%d", userID_to_chong_userID[_ratings.to_user_id(nu)]);
+      fprintf(outf2, "\t%d", userID_to_chong_userID[_ratings.to_user_id(nu)]);
     }
     fprintf(outf, "\n");
     fprintf(outf2, "\n");
@@ -498,7 +501,6 @@ CollabTM::write_mult_format()
 
   MapVec test_users;
   MapVec test_docs; 
-  printf("%u-%u\n", _env.nusers, _env.ndocs); 
   for(CountMap::const_iterator cm = _test_map.begin(); cm != _test_map.end(); ++cm) { 
   	const Rating &r = cm->first;
 	uint32_t uid = r.first;
