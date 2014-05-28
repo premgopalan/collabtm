@@ -271,8 +271,6 @@ CollabTM::load_validation_and_test_sets()
     const Rating &r = i->first;
     MovieMap::const_iterator itr = _cold_start_docs.find(r.second);
     if (itr != _cold_start_docs.end()) {
-      // insert into coldstart test map
-      _coldstart_test_map[r] = i->second;
       debug("test: erasing rating r (%d,%d) in heldout cold start", 
 	    _ratings.to_user_id(r.first), 
 	    _ratings.to_movie_id(r.second));
@@ -327,14 +325,23 @@ CollabTM::load_validation_and_test_sets()
   fflush(g);
   fclose(g);
 
-  g = fopen(Env::file_str("/coldstart_test.tsv").c_str(), "w");
-  for (CountMap::const_iterator itr = _coldstart_test_map.begin(); 
-       itr != _coldstart_test_map.end(); ++itr) {
-    const Rating &r = itr->first;
-    yval_t v = itr->second;
-    fprintf(g, "%d\t%d\t%d\n", r.first, r.second, v);
+  FILE * outf = fopen(Env::file_str("/coldstart_test.tsv").c_str(), "w");
+  for (uint32_t nu = 0; nu < _nusers; ++nu) {
+    const vector<uint32_t> *docs = _ratings.get_movies(nu);
+    for (uint32_t j = 0; j < docs->size(); ++j) {
+      uint32_t nd = (*docs)[j];
+      
+      MovieMap::const_iterator mp = _cold_start_docs.find(nd);
+      if (mp == _cold_start_docs.end())
+	continue;
+
+      yval_t y = _ratings.r(nu,nd);
+      Rating r(nu,nd);
+      _coldstart_test_map[r] = y;
+      fprintf(outf, "%d\t%d\t%d\n", _ratings.to_user_id(nu), _ratings.to_movie_id(nd), y);
+    }
   }
-  fclose(g);
+  fclose(outf);
 
   Env::plog("cs test ratings size", _coldstart_test_map.size());
   Env::plog("cs total users size", _cs_users.size());
@@ -1788,8 +1795,7 @@ CollabTM::coldstart_precision()
 	int v = _ratings.rating_class(v_);
 	assert(v > 0);
 	if (_save_ranking_file) {
-	  if (_ratings.r(n, m) == .0) // skip training
-	    fprintf(f, "%d\t%d\t%.5f\t%d\n", n2, m2, pred, v);
+	  fprintf(f, "%d\t%d\t%.5f\t%d\n", n2, m2, pred, v);
 	}
 
 
@@ -1804,7 +1810,6 @@ CollabTM::coldstart_precision()
 	}
       } else {
 	if (_save_ranking_file) {
-	  if (_ratings.r(n, m) == .0) // skip training
 	    fprintf(f, "%d\t%d\t%.5f\t%d\n", n2, m2, pred, 0);
 	}
       }
