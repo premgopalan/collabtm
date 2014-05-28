@@ -5,7 +5,7 @@ require(scales)
 
 theme_set(theme_bw())
 
-methods <- c("CTPF-CS")
+methods <- c("CTPF")
 datasets <- c("mendeley"="Mendeley")
 
 ########################################
@@ -24,7 +24,6 @@ users <- adply(names(datasets), 1, function(dataset) {
 users$X1 <- names(datasets)[users$X1]
 names(users)[1] <- "dataset"
 
-# clean up dataset labels and remove netflix implicit
 users <- transform(users, dataset=revalue(dataset, datasets))
 users <- transform(users, dataset=factor(as.character(dataset), datasets))
 
@@ -103,7 +102,7 @@ for (dataset in names(datasets)) {
 
   # notes:
 
-  for (method in c("ctpf-cs")) {
+  for (method in c("ctpf")) {
       tsv <- sprintf('../output/%s/%s/precision.txt', dataset, method)
       if (file.exists(tsv)) {
         print(tsv)
@@ -205,7 +204,7 @@ p <- p + geom_line(aes(linetype=as.factor(method), colour=as.factor(method)))
 p <- p + xlab('Number of recommendations') + ylab('Mean recall')
 p <- p + scale_x_continuous(breaks=c(10,50,100)) + scale_y_continuous(labels=percent)
 p <- p + theme(legend.title=element_blank())
-p <- p + facet_wrap(~ dataset, nrow=1, scale="free_y")
+#p <- p + facet_wrap(~ dataset, nrow=1, scale="free_y")
 ggsave(p, filename='../output/figures/mean_recall_by_num_recs.pdf', width=10, height=2.5)
 p
 
@@ -247,7 +246,7 @@ plot.data$X1 <- percentiles[plot.data$X1]
 names(plot.data) <- c("dataset","method","percentile","mean.recall")
 p <- ggplot(plot.data, aes(x=percentile, y=mean.recall))
 p <- p + geom_line(aes(color=method, linetype=method))
-p <- p + facet_wrap(~ dataset, nrow=1, scale="free_y")
+#p <- p + facet_wrap(~ dataset, nrow=1, scale="free_y")
 p <- p + scale_x_continuous(labels=percent, breaks=c(0.1, 0.5, 0.9))
 p <- p + scale_y_continuous(labels=percent)
 p <- p + xlab('User percentile by activity') + ylab('Mean recall')

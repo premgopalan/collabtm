@@ -83,7 +83,7 @@ for (dataset in c("mendeley")) {
   test.users <- read.delim(test.users.file, sep='\t', header=F, col.names=c('user','num.test.items'))
 
   # notes:
-  for (method in c("ctpf", "ctpf-cs")) {
+  for (method in c("ctpf")) {
     for (K in ranks) {
       ranking.file <- sprintf('../output/%s/%s/ranking.tsv', dataset, method)
       prec.file <- sprintf('../output/%s/%s/precision.txt', dataset, method)
