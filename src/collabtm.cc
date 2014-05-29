@@ -371,6 +371,9 @@ CollabTM::gen_ranking_for_users()
     printf("loading x: "); fflush(stdout);
     _x.load();
     printf("done\n"); 
+    printf("loading beta: "); fflush(stdout);
+    _beta.load();
+    printf("done\n");
 
     // load test users 
     char buf[4096];
@@ -412,8 +415,8 @@ CollabTM::write_mult_format()
   for (uint32_t nu = 0; nu < _nusers; ++nu) {
     const vector<uint32_t> *docs = _ratings.get_movies(nu);
 
-	uint32_t s = userID_to_chong_userID.size();
-	userID_to_chong_userID[_ratings.to_user_id(nu)] = s;
+    uint32_t s = userID_to_chong_userID.size();
+    userID_to_chong_userID[_ratings.to_user_id(nu)] = s;
 
     //fprintf(outf, "%d\t%d", _ratings.to_user_id(nu), x);
     for (uint32_t j = 0; j < docs->size(); ++j) {
@@ -1949,41 +1952,46 @@ CollabTM::coldstart_local_inference()
   _cstheta.set_to_prior();
   _cstheta.set_to_prior_curr();
 
-  uint32_t processed_docs = 0;
-  for (MovieMap::const_iterator i = _cold_start_docs.begin(); 
-       i != _cold_start_docs.end(); ++i) {
-    uint32_t doc = i->first;
-    
-    assert (_doc_to_cs_idmap.find(doc) != _doc_to_cs_idmap.end());
-    uint32_t docseq = _doc_to_cs_idmap[doc];
-    
-    Array phi(_k);
-    const WordVec *w = _ratings.get_words(doc);
-    for (uint32_t nw = 0; w && nw < w->size(); nw++) {
-      WordCount p = (*w)[nw];
-      uint32_t word = p.first;
-      uint32_t count = p.second;
+  uint32_t itr = 0;
+  do {
+
+    uint32_t processed_docs = 0;
+    for (MovieMap::const_iterator i = _cold_start_docs.begin(); 
+	 i != _cold_start_docs.end(); ++i) {
+      uint32_t doc = i->first;
       
-      get_phi(_cstheta, docseq, _beta, word, phi);
+      assert (_doc_to_cs_idmap.find(doc) != _doc_to_cs_idmap.end());
+      uint32_t docseq = _doc_to_cs_idmap[doc];
       
-      if (count > 1)
-	phi.scale(count);
-      
-      _cstheta.update_shape_next(docseq, phi);
-      _beta.update_shape_next(word, phi);
+      Array phi(_k);
+      const WordVec *w = _ratings.get_words(doc);
+      for (uint32_t nw = 0; w && nw < w->size(); nw++) {
+	WordCount p = (*w)[nw];
+	uint32_t word = p.first;
+	uint32_t count = p.second;
+	
+	get_phi(_cstheta, docseq, _beta, word, phi);
+	
+	if (count > 1)
+	  phi.scale(count);
+	
+	_cstheta.update_shape_next(docseq, phi);
+      }
+      processed_docs++;
+      printf("\r%d", processed_docs);
+      fflush(stdout);
     }
-    processed_docs++;
-    printf("\r%d", processed_docs);
-    fflush(stdout);
-  }
-  Env::plog("processed %d cold-start docs", processed_docs);
+    Env::plog("processed %d cold-start docs", processed_docs);
+    
+    Array betasum(_k);
+    _beta.sum_rows(betasum);
+    _cstheta.update_rate_next(betasum);
+    _cstheta.swap();
+    _cstheta.compute_expectations();
 
-  Array betasum(_k);
-  _beta.sum_rows(betasum);
-  _cstheta.update_rate_next(betasum);
-  _cstheta.swap();
-  _cstheta.compute_expectations();
-
+    itr++;
+  } while (itr < 10);
+  
   // save it
   _cstheta.save_state(_ratings.seq2movie());
 }
