@@ -415,17 +415,6 @@ CollabTM::write_mult_format()
 	uint32_t s = userID_to_chong_userID.size();
 	userID_to_chong_userID[_ratings.to_user_id(nu)] = s;
 
-//    uint32_t x = 0;
-//    for (uint32_t j = 0; j < docs->size(); ++j) {
-//      uint32_t nd = (*docs)[j];
-//      MovieMap::const_iterator mp = _cold_start_docs.find(nd);
-//      if (mp == _cold_start_docs.end())
-//	continue;
-//      x++;
-//    }
-//    if (x == 0)
-//      continue;   // no docs in cold start for this user; skip
-
     //fprintf(outf, "%d\t%d", _ratings.to_user_id(nu), x);
     for (uint32_t j = 0; j < docs->size(); ++j) {
       uint32_t nd = (*docs)[j];
