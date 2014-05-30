@@ -92,8 +92,8 @@ public:
   void set_to_prior();
   void set_to_prior_curr();
 
-  void update_shape_next(uint32_t n, const Array &sphi);
-  void update_shape_next(uint32_t n, const uArray &sphi);
+  void update_shape_next1(uint32_t n, const Array &sphi);
+  void update_shape_next2(uint32_t n, const uArray &sphi);
   void update_shape_curr(uint32_t n, const uArray &sphi);
 
   void update_rate_next(const Array &u, const Array &scale);
@@ -145,14 +145,14 @@ GPMatrix::set_to_prior_curr()
 }
 
 inline void
-GPMatrix::update_shape_next(uint32_t n, const Array &sphi)
+GPMatrix::update_shape_next1(uint32_t n, const Array &sphi)
 {
   _snext.add_slice(n, sphi);
   //printf("snext = %s\n", _snext.s().c_str());
 }
 
 inline void
-GPMatrix::update_shape_next(uint32_t n, const uArray &sphi)
+GPMatrix::update_shape_next2(uint32_t n, const uArray &sphi)
 {
   _snext.add_slice(n, sphi);
 }
@@ -298,7 +298,7 @@ GPMatrix::initialize_exp()
   double **vd1 = _Ev.data();
   double **vd2 = _Elogv.data();
 
-  Array b(_k);  
+  Array b(_k);
   for (uint32_t i = 0; i < _n; ++i)
     for (uint32_t k = 0; k < _k; ++k) {
       b[k] = _rprior + 0.1 * gsl_rng_uniform(*_r);
@@ -420,9 +420,9 @@ public:
   void set_to_prior();
   void set_to_prior_curr();
   void set_to_zero();
-  void update_shape_next(const Array &phi);
-  void update_shape_next(uint32_t n, const Array &sphi);
-  void update_shape_next(uint32_t n, const uArray &sphi);
+  //void update_shape_next(const Array &phi);
+  void update_shape_next1(uint32_t n, const Array &sphi);
+  void update_shape_next2(uint32_t n, const uArray &sphi);
   void update_shape_curr(uint32_t n, const uArray &sphi);
   void set_shape_curr(uint32_t n, const Array &phi); 
 
@@ -479,13 +479,13 @@ GPMatrixGR::set_to_zero()
 }
 
 inline void
-GPMatrixGR::update_shape_next(uint32_t n, const Array &sphi)
+GPMatrixGR::update_shape_next1(uint32_t n, const Array &sphi)
 {
   _snext.add_slice(n, sphi);
 }
 
 inline void
-GPMatrixGR::update_shape_next(uint32_t n, const uArray &sphi)
+GPMatrixGR::update_shape_next2(uint32_t n, const uArray &sphi)
 {
   _snext.add_slice(n, sphi);
 }

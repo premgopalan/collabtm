@@ -356,6 +356,7 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
   plog("heldout_items_ratio", heldout_items_ratio);
   plog("seed", seed);
   plog("reportfreq", reportfreq);
+  plog("vb", vb);
   plog("vbinit", vbinit);
   plog("vbinit_iterations", vbinit_iterations);
   plog("use_docs", use_docs);

@@ -41,6 +41,7 @@ using namespace std;
 #define ROW_LIMIT 512
 #define COL_LIMIT 32
 #define CELL_LIMIT 32
+#define MAX_LINE_BYTES 10240
 
 static int cmpdouble(const void *p1, const void *p2);
 static int cmpuint32(const void *p1, const void *p2);
@@ -788,7 +789,7 @@ D1Array<double>::load(string name) const
   uint32_t NCOLS = 3;
 
   uint32_t n = 0;
-  uint32_t sz = 32 * NCOLS;
+  uint32_t sz = MAX_LINE_BYTES;
   char *line = (char *)malloc(sz);
   while (!feof(f)) {
     if (fgets(line, sz, f) == NULL)
@@ -1166,7 +1167,7 @@ D2Array<double>::load(string name, uint32_t skipcols,
 
   double **md = _data;
   uint32_t m = 0;
-  int sz = transpose ? 32 *_m : 32*_n;
+  int sz = transpose ? 1024 *_m : 1024*_n;
   char *line = (char *)malloc(sz);
   while (!feof(f)) {
     if (fgets(line, sz, f) == NULL)
