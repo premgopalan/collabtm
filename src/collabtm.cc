@@ -569,7 +569,10 @@ CollabTM::get_phi(GPBase<Matrix> &a, uint32_t ai,
   const double  **elogb = b.expected_logv().const_data();
   phi.zero();
   for (uint32_t k = 0; k < _k; ++k)
-    phi[k] = eloga[ai][k] + elogb[bi][k];
+    if (!_env.content_only)
+      phi[k] = eloga[ai][k] + elogb[bi][k];
+    else
+      phi[k] = eloga[ai][k];
   phi.lognormalize();
 }
 
@@ -590,7 +593,10 @@ CollabTM::get_xi(uint32_t nu, uint32_t nd,
       xi[k] = elogx[nu][k] + elogtheta[nd][k];
     else {
       uint32_t t = k - _k;
-      xi[k] = elogx[nu][t] + elogepsilon[nd][t];
+      if (!_env.content_only)
+        xi[k] = elogx[nu][t] + elogepsilon[nd][t];
+      else
+        xi[k] = elogx[nu][t];
     }
   }
   xi.lognormalize();
@@ -1115,7 +1121,8 @@ CollabTM::update_all_rates()
       _epsilon.scaled_sum_rows(scaledepsilonsum, _a.expected_v());
     else
       _epsilon.sum_rows(scaledepsilonsum);
-    _x.update_rate_next(scaledepsilonsum);
+    if (!_env.content_only)
+      _x.update_rate_next(scaledepsilonsum);
     
     // update epsilon rate
     if (_env.fixeda)
@@ -1131,8 +1138,12 @@ CollabTM::update_all_rates()
       Matrix &epsilon_ev = _epsilon.expected_v();
       const double **epsilon_evd = epsilon_ev.const_data();
       for (uint32_t nd = 0; nd < _ndocs; ++nd)
-	for (uint32_t k = 0; k < _k; ++k)
+	for (uint32_t k = 0; k < _k; ++k) { 
+    if (!_env.content_only)
 	  arate[nd] += xsum[k] * (theta_evd[nd][k] + epsilon_evd[nd][k]);
+    else
+	  arate[nd] += xsum[k] * theta_evd[nd][k];
+    }
       _a.update_rate_next(arate);
     }
   }
@@ -1201,7 +1212,8 @@ CollabTM::stochastic_update_all_rates_in_seq(UserMap &sampled_words)
       _epsilon.sum_rows(scaledepsilonsum, _sampled_movies);
     
     _x.update_rate_next(scaledthetasum);
-    _x.update_rate_next(scaledepsilonsum);
+    if (!_env.content_only)
+      _x.update_rate_next(scaledepsilonsum);
 
     //_x.swap();
     //_x.compute_expectations();
@@ -1227,7 +1239,10 @@ CollabTM::stochastic_update_all_rates_in_seq(UserMap &sampled_words)
               itr != _sampled_movies.end(); ++itr) { 
           nd = itr->first; 
           for (uint32_t k = 0; k < _k; ++k)
-            arate[nd] += xsum[k] * (theta_evd[nd][k] + epsilon_evd[nd][k]);
+            if (!_env.content_only)
+              arate[nd] += xsum[k] * (theta_evd[nd][k] + epsilon_evd[nd][k]);
+            else
+              arate[nd] += xsum[k] * theta_evd[nd][k];
       }
       _a.update_rate_next(arate);
 
@@ -1288,7 +1303,8 @@ CollabTM::update_all_rates_in_seq()
       _epsilon.sum_rows(scaledepsilonsum);
     
     _x.update_rate_next(scaledthetasum);
-    _x.update_rate_next(scaledepsilonsum);
+    if (!_env.content_only)
+      _x.update_rate_next(scaledepsilonsum);
     
     _x.swap();
     _x.compute_expectations();
@@ -1311,7 +1327,10 @@ CollabTM::update_all_rates_in_seq()
       const double **epsilon_evd = epsilon_ev.const_data();
       for (uint32_t nd = 0; nd < _ndocs; ++nd)
 	for (uint32_t k = 0; k < _k; ++k)
-	  arate[nd] += xsum[k] * (theta_evd[nd][k] + epsilon_evd[nd][k]);
+    if (!_env.content_only)
+      arate[nd] += xsum[k] * (theta_evd[nd][k] + epsilon_evd[nd][k]);
+    else
+      arate[nd] += xsum[k] * theta_evd[nd][k];
       _a.update_rate_next(arate);
       _a.swap();
       _a.compute_expectations();
@@ -1419,8 +1438,11 @@ CollabTM::approx_log_likelihood()
 	    (elogx[nu][k] + elogtheta[nd][k]);
 	else {
 	  uint32_t t = k - _k;
-	  r = !_env.fixeda ? (elogx[nu][t] + elogepsilon[nd][t] + eloga[nd]) :
-	    (elogx[nu][t] + elogepsilon[nd][t]);
+    if (!_env.content_only)
+      r = !_env.fixeda ? (elogx[nu][t] + elogepsilon[nd][t] + eloga[nd]) :
+        (elogx[nu][t] + elogepsilon[nd][t]);
+    else
+      r = !_env.fixeda ? (elogx[nu][t] + eloga[nd]) : elogx[nu][t];
 	}
 	v += y * xi[k] * (r - log(xi[k]));
       }
@@ -1433,8 +1455,11 @@ CollabTM::approx_log_likelihood()
 	    (ex[nu][k] * etheta[nd][k]);
 	else {
 	  uint32_t t = k - _k;
-	  r = !_env.fixeda ? (ex[nu][t] * eepsilon[nd][t] * ea[nd]) : \
-	    (ex[nu][t] * eepsilon[nd][t]);
+    if (!_env.content_only)
+      r = !_env.fixeda ? (ex[nu][t] * eepsilon[nd][t] * ea[nd]) : \
+        (ex[nu][t] * eepsilon[nd][t]);
+    else
+      r = !_env.fixeda ? (ex[nu][t] * ea[nd]) :(ex[nu][t]);
 	}
 	s -= r;
       }
@@ -1446,7 +1471,8 @@ CollabTM::approx_log_likelihood()
   s += _theta.compute_elbo_term();
   s += _beta.compute_elbo_term();
   s += _x.compute_elbo_term();
-  s += _epsilon.compute_elbo_term();
+  if (!_env.content_only)
+    s += _epsilon.compute_elbo_term();
   if (!_env.fixeda)
     s += _a.compute_elbo_term();
 
@@ -1465,6 +1491,7 @@ CollabTM::save_model()
     fflush(stdout);
     _x.save_state(_ratings.seq2user());
     _epsilon.save_state(_ratings.seq2movie());
+
     if (!_env.fixeda) 
       _a.save_state(_ratings.seq2movie());
   }
@@ -1909,7 +1936,10 @@ CollabTM::per_rating_prediction(uint32_t user, uint32_t doc) const
   double s = .0;
   double item_contrib = 0;
   for (uint32_t k = 0; k < _k; ++k) {
-    item_contrib = (etheta[doc][k] + eepsilon[doc][k]); 
+    if (!_env.content_only)
+      item_contrib = (etheta[doc][k] + eepsilon[doc][k]); 
+    else
+      item_contrib = etheta[doc][k]; 
     if (!_env.fixeda)
       s +=  item_contrib * ea[doc] * ex[user][k];
     else
@@ -1938,7 +1968,10 @@ CollabTM::coldstart_per_rating_prediction(uint32_t user, uint32_t doc) const
   double s = .0;
   double item_contrib = 0;
   for (uint32_t k = 0; k < _k; ++k) {
-    item_contrib = (etheta[docseq][k]); // + eepsilon[doc][k]);
+    if (!_env.content_only)
+      item_contrib = (etheta[docseq][k]); // + eepsilon[doc][k]);
+    else
+      item_contrib = etheta[docseq][k];
     s += item_contrib * ex[user][k];
   }
   if (s < 1e-30)
