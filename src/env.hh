@@ -71,7 +71,7 @@ public:
       bool perturb_only_beta_shape,
       bool lda, bool lda_init, bool ppc, 
       bool seq_init, bool seq_init_samples,
-      bool fixed_doc_param, bool phased);
+      bool fixed_doc_param, bool phased, bool content_only);
 
   ~Env() { fclose(_plogf); }
 
@@ -128,6 +128,7 @@ public:
   bool seq_init_samples;
   bool fixed_doc_param;
   bool phased;
+  bool content_only; 
 
   template<class T> static void plog(string s, const T &v);
   static string file_str(string fname);
@@ -225,7 +226,7 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
 	 bool perturb_only_beta_shapev,
 	 bool ldav, bool lda_initv, bool ppcv,
 	 bool seq_initv, bool seq_init_samplesv,
-	 bool fixed_doc_paramv, bool phasedv)
+	 bool fixed_doc_paramv, bool phasedv, bool content_onlyv)
   : dataset(datasetv),
     ndocs(ndocs_v),
     nvocab(nvocab_v),
@@ -271,7 +272,8 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
     seq_init(seq_initv), 
     seq_init_samples(seq_init_samplesv),
     fixed_doc_param(fixed_doc_paramv),
-    phased(phasedv)
+    phased(phasedv),
+    content_only(content_onlyv)
 {
   ostringstream sa;
   sa << "nusers" << nusers << "-";
@@ -333,6 +335,9 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
   if (fixed_doc_param)
     sa << "-fdp"; 
 
+  if (content_only)
+    sa << "-content-only"; 
+
   prefix = sa.str();
   level = Logger::TEST;
 
@@ -367,6 +372,7 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
   plog("seq-init-samples", seq_init_samples);
   plog("phased", phased);
   plog("fixed_doc_param", fixed_doc_param); 
+  plog("content_only", content_only);
  
   //string ndatfname = file_str("/network.dat");
   //unlink(ndatfname.c_str());
