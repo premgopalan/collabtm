@@ -18,7 +18,7 @@ CollabTM::CollabTM(Env &env, Ratings &ratings)
     _x("x", 0.3, 0.3, _nusers,_k,&_r),
     _epsilon("epsilon", 0.3, 0.3, _ndocs,_k,&_r),
     _a("a", 0.3, 0.3, _ndocs, &_r),
-    _cstheta("cstheta", 0.3, 0.3, _ndocs,_k,&_r),
+    _cstheta(NULL), 
     _prev_h(.0), _nh(0),
     _save_ranking_file(false),
     _topN_by_user(100),
@@ -138,6 +138,9 @@ CollabTM::initialize()
 	_a.compute_expectations();
       }
     } else {
+      _x.initialize();
+      _epsilon.initialize();
+
       _x.initialize_exp();
       _epsilon.initialize_exp();
       
@@ -278,6 +281,33 @@ CollabTM::load_validation_and_test_sets()
     } else
       ++i;
   }
+
+  FILE *g = fopen(Env::file_str("/in-test.tsv").c_str(), "w");
+  for (CountMap::const_iterator i = _test_map.begin(); i != _test_map.end(); ++i) {
+    const Rating &r = i->first;
+    fprintf(g, "%d\t%d\n", _ratings.to_user_id(r.first), 
+	    _ratings.to_movie_id(r.second));
+  }
+  fflush(g);
+  fclose(g);
+  
+  g = fopen(Env::file_str("/in-train.tsv").c_str(), "w");
+  for (uint32_t nu = 0; nu < _nusers; ++nu) {
+    const vector<uint32_t> *docs = _ratings.get_movies(nu);
+    uint32_t x = 0;
+    for (uint32_t j = 0; j < docs->size(); ++j) {
+      uint32_t nd = (*docs)[j];
+      MovieMap::const_iterator mp = _cold_start_docs.find(nd);
+      if (mp != _cold_start_docs.end()) { 
+	continue;
+      }
+      x++;
+    }
+    if (x == 0)
+      continue;   // all docs in cold start for this user; skip
+  }
+  fflush(g);
+  fclose(g);
   
   CountMap::iterator j = _validation_map.begin(); 
   while (j != _validation_map.end()) {
@@ -294,7 +324,7 @@ CollabTM::load_validation_and_test_sets()
   Env::plog("test ratings after", _test_map.size());
   Env::plog("validation ratings after", _validation_map.size());
 
-  FILE *g = fopen(Env::file_str("/coldstart_docs.tsv").c_str(), "w");
+  g = fopen(Env::file_str("/coldstart_docs.tsv").c_str(), "w");
   write_coldstart_docs(g, _cold_start_docs);
   fclose(g);
 
@@ -362,47 +392,57 @@ void
 CollabTM::gen_ranking_for_users()
 {
     // load rating prediction parameters
+  if (_env.use_docs) {
     printf("loading theta: "); fflush(stdout);
     _theta.load();
     printf("done\n");
-    printf("loading epsilon: "); fflush(stdout);
-    _epsilon.load();
-    printf("done\n"); 
-    printf("loading x: "); fflush(stdout);
-    _x.load();
-    printf("done\n"); 
     printf("loading beta: "); fflush(stdout);
     _beta.load();
     printf("done\n");
-
-    // load test users 
-    char buf[4096];
-    sprintf(buf, "%s/test_users.tsv", _env.datfname.c_str());
-    FILE *f = fopen(buf, "r");
-    assert(f);
-    _ratings.read_test_users(f, &_sampled_users);
-    fclose(f);
- 
-    // get and output rankings
-    _save_ranking_file = true;
-    printf("precision\n"); fflush(stdout);
-    precision();
+  }
+  
+  if (_env.use_ratings) {
+    printf("loading x: "); fflush(stdout);
+    _x.load();
+    printf("done\n"); 
+    printf("loading epsilon: "); fflush(stdout);
+    _epsilon.load();
     printf("done\n");
+  }
+  
+  // load test users 
+  char buf[4096];
+  sprintf(buf, "%s/test_users.tsv", _env.datfname.c_str());
+  FILE *f = fopen(buf, "r");
+  assert(f);
+  _ratings.read_test_users(f, &_sampled_users);
+  fclose(f);
+  
+  // get and output rankings
+  _save_ranking_file = true;
+  printf("precision\n"); fflush(stdout);
+  precision();
+  printf("done\n");
+  
+  if (_env.use_docs) {
     printf("coldstart local inference and HOL\n"); fflush(stdout);
+    lerr("computing coldstart...");
+    coldstart_local_inference();
     coldstart_rating_likelihood();
     printf("done\n");
     printf("coldstart precision\n"); fflush(stdout);
     coldstart_precision();
-    printf("done\n");
-    printf("DONE writing ranking.tsv in output directory\n");
-
-    // get and output likelihood
-    bool validation=false;
-    bool experiment=true;
-    if(!compute_likelihood(validation)) {
-        save_model();
-        exit(0);
-    }
+  }
+  printf("done\n");
+  printf("DONE writing ranking.tsv in output directory\n");
+  
+  // get and output likelihood
+  bool validation=false;
+  bool experiment=true;
+  if(!compute_likelihood(validation)) {
+    save_model();
+    exit(0);
+  }
 }
 
 void
@@ -678,8 +718,8 @@ CollabTM::batch_infer()
 	  if (count > 1)
 	    phi.scale(count);
 	  
-	  _theta.update_shape_next(nd, phi);
-	  _beta.update_shape_next(word, phi);
+	  _theta.update_shape_next1(nd, phi);
+	  _beta.update_shape_next1(word, phi);
 	}
 
 	if (_iter == 0)
@@ -726,11 +766,11 @@ CollabTM::batch_infer()
         }
         
         if (!_env.fixed_doc_param)
-          _theta.update_shape_next(nd, xi_a);
+          _theta.update_shape_next1(nd, xi_a);
         
-        _epsilon.update_shape_next(nd, xi_b);
-        _x.update_shape_next(nu, xi_a);
-        _x.update_shape_next(nu, xi_b);
+        _epsilon.update_shape_next1(nd, xi_b);
+        _x.update_shape_next1(nu, xi_a);
+        _x.update_shape_next1(nu, xi_b);
       }
       else { // _env.content_only 
         get_phi(_x, nu, _theta, nd, phi);
@@ -739,9 +779,9 @@ CollabTM::batch_infer()
           phi.scale(y);
         
         if (!_env.fixed_doc_param)
-          _theta.update_shape_next(nd, phi);
+          _theta.update_shape_next1(nd, phi);
         
-        _x.update_shape_next(nu, phi);
+        _x.update_shape_next1(nu, phi);
         
       }
         
@@ -754,8 +794,8 @@ CollabTM::batch_infer()
 	    if (y > 1)
 	      phi.scale(y);
 	    
-	    _x.update_shape_next(nu, phi);
-	    _epsilon.update_shape_next(nd, phi);
+	    _x.update_shape_next1(nu, phi);
+	    _epsilon.update_shape_next1(nd, phi);
 	  }
 	}
       }
@@ -771,23 +811,26 @@ CollabTM::batch_infer()
       compute_all_expectations();
     }
 
-    if (_iter % 10 == 0) {
+    if (_iter % _env.reportfreq == 0) {
       lerr("Iteration %d\n", _iter);
       approx_log_likelihood();
       if (_env.use_ratings) {
 	compute_likelihood(true);
 	compute_likelihood(false);
-      }
-      save_model();
-      if (_env.use_ratings) {
-	coldstart_rating_likelihood();
-	coldstart_precision();
 	precision();
       }
+      save_model();
     }
     
-    if (_env.save_state_now)
-      exit(0);
+    if (_env.save_state_now) {
+      if (_env.use_ratings) {
+	compute_likelihood(true);
+	compute_likelihood(false);
+	precision();
+      }
+      save_model();
+      _env.save_state_now = 0;
+    }
 
     _iter++;
   }
@@ -895,8 +938,8 @@ CollabTM::online_infer()
                     if (count > 1)
                         phi.scale(count);
 
-                    _theta.update_shape_next(nd, phi);
-                    _beta.update_shape_next(word, phi);
+                    _theta.update_shape_next1(nd, phi);
+                    _beta.update_shape_next1(word, phi);
                 }
             }
         }
@@ -924,10 +967,10 @@ CollabTM::online_infer()
                         }
 
                         if (!_env.fixed_doc_param)
-                            _theta.update_shape_next(nd, xi_a);
-                        _epsilon.update_shape_next(nd, xi_b);
-                        _x.update_shape_next(nu, xi_a);
-                        _x.update_shape_next(nu, xi_b);
+                            _theta.update_shape_next1(nd, xi_a);
+                        _epsilon.update_shape_next1(nd, xi_b);
+                        _x.update_shape_next1(nu, xi_a);
+                        _x.update_shape_next1(nu, xi_b);
 
                         if (!_env.fixeda)
                             _a.update_shape_next(nd, y); // since \sum_k \xi_k = 1
@@ -938,8 +981,8 @@ CollabTM::online_infer()
                         if (y > 1)
                             phi.scale(y);
 
-                        _x.update_shape_next(nu, phi);
-                        _epsilon.update_shape_next(nd, phi);
+                        _x.update_shape_next1(nu, phi);
+                        _epsilon.update_shape_next1(nd, phi);
                     }
                 }
             }
@@ -1766,6 +1809,9 @@ CollabTM::precision()
 void
 CollabTM::coldstart_precision()
 { 
+  if (!_env.use_docs)
+    return;
+
   double mhits10 = 0, mhits100 = 0;
   double cumndcg10 = 0, cumndcg100 = 0;
   uint32_t total_users = 0;
@@ -1935,7 +1981,8 @@ double
 CollabTM::coldstart_per_rating_prediction(uint32_t user, uint32_t doc) const
 {
   assert (_env.fixeda);
-  const double ** etheta = _cstheta.expected_v().const_data();
+  assert (_cstheta);
+  const double ** etheta = _cstheta->expected_v().const_data();
   const double ** ex = _x.expected_v().const_data();
   const double ** eepsilon = _epsilon.expected_v().const_data();
   
@@ -1947,7 +1994,7 @@ CollabTM::coldstart_per_rating_prediction(uint32_t user, uint32_t doc) const
   double item_contrib = 0;
   for (uint32_t k = 0; k < _k; ++k) {
     if (!_env.content_only)
-      item_contrib = (etheta[docseq][k] + eepsilon[doc][k]);
+      item_contrib = (etheta[docseq][k]); // + eepsilon[doc][k]);
     else
       item_contrib = etheta[docseq][k];
     s += item_contrib * ex[user][k];
@@ -1993,16 +2040,55 @@ CollabTM::log_factorial(uint32_t n)  const
   return v;
 } 
 
-double
+void
 CollabTM::coldstart_local_inference()
 {
+  if (!_env.use_docs)
+    return;
+
+  assert (_ncsdoc_seq == _cold_start_docs.size());
+  _cstheta = new GPMatrix("cstheta", 0.3, 0.3, _cold_start_docs.size(), _k,&_r);
+
   // keep _beta fixed and compute theta for coldstart docs
-  _cstheta.set_to_prior();
-  _cstheta.set_to_prior_curr();
+  _cstheta->set_to_prior();
+  _cstheta->set_to_prior_curr();
+  _theta.load_from_lda(_env.datfname, 0.1, _k);
+
+  // initialize cstheta from theta (assuming lda init)
+  if (_env.lda || _env.lda_init) {
+    for (MovieMap::const_iterator i = _cold_start_docs.begin(); 
+	 i != _cold_start_docs.end(); ++i) {
+      uint32_t doc = i->first;
+      
+      assert (_doc_to_cs_idmap.find(doc) != _doc_to_cs_idmap.end());
+      uint32_t docseq = _doc_to_cs_idmap[doc];
+
+      const double **tv = _theta.expected_v().const_data();
+      const double **tlogv = _theta.expected_logv().const_data();
+      double **cstv = _cstheta->expected_v().data();
+      double **cstlogv = _cstheta->expected_logv().data();
+      for (uint32_t k = 0; k < _k; ++k) {
+	cstv[docseq][k] = tv[doc][k];
+	cstlogv[docseq][k] = tlogv[doc][k];
+      }
+    }
+    printf("initialized cstheta from LDA");
+  } else 
+    _cstheta->compute_expectations();
+
+  // save it
+  _cstheta->save_state(_ratings.seq2movie());
+
+  // if LDA is held fixed, we don't need to do local inference
+  // simply use the initialized cs theta expectations
+  if (_env.lda && _env.fixed_doc_param)
+    return;
+
+  Array betasum(_k);
+  _beta.sum_rows(betasum);
 
   uint32_t itr = 0;
   do {
-
     uint32_t processed_docs = 0;
     for (MovieMap::const_iterator i = _cold_start_docs.begin(); 
 	 i != _cold_start_docs.end(); ++i) {
@@ -2018,38 +2104,35 @@ CollabTM::coldstart_local_inference()
 	uint32_t word = p.first;
 	uint32_t count = p.second;
 	
-	get_phi(_cstheta, docseq, _beta, word, phi);
+	get_phi(*_cstheta, docseq, _beta, word, phi);
 	
 	if (count > 1)
 	  phi.scale(count);
 	
-	_cstheta.update_shape_next(docseq, phi);
+	_cstheta->update_shape_next1(docseq, phi);
       }
       processed_docs++;
       printf("\r%d", processed_docs);
       fflush(stdout);
     }
-    Env::plog("processed %d cold-start docs", processed_docs);
     
-    Array betasum(_k);
-    _beta.sum_rows(betasum);
-    _cstheta.update_rate_next(betasum);
-    _cstheta.swap();
-    _cstheta.compute_expectations();
-
+    _cstheta->update_rate_next(betasum);
+    _cstheta->swap();
+    _cstheta->compute_expectations();
     itr++;
+    coldstart_rating_likelihood();
   } while (itr < 10);
   
   // save it
-  _cstheta.save_state(_ratings.seq2movie());
+  _cstheta->save_state(_ratings.seq2movie());
 }
 
-double
+void
 CollabTM::coldstart_rating_likelihood()
 {
-  lerr("computing coldstart local thetas");
-  coldstart_local_inference();
-  
+  if (!_env.use_docs)
+    return;
+
   lerr("computing coldstart rating likelihood");
   // compute likelihood of "heldout" ratings
   // ALL ratings for a coldstart document are heldout

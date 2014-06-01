@@ -56,8 +56,8 @@ private:
   uint32_t factorial(uint32_t n)  const;
   double log_factorial(uint32_t n)  const;
 
-  double coldstart_local_inference();
-  double coldstart_rating_likelihood();
+  void coldstart_local_inference();
+  void coldstart_rating_likelihood();
   double coldstart_per_rating_prediction(uint32_t user, uint32_t doc) const;
 
   bool is_validation(const Rating &r) const;
@@ -80,7 +80,7 @@ private:
   GPMatrixGR _x;
   GPMatrix _epsilon;
   GPArray _a;
-  GPMatrix _cstheta; // coldstart docs
+  GPMatrix *_cstheta; // coldstart docs
 
   uint32_t _start_time;
   gsl_rng *_r;
