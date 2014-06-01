@@ -392,50 +392,57 @@ void
 CollabTM::gen_ranking_for_users()
 {
     // load rating prediction parameters
+  if (_env.use_docs) {
     printf("loading theta: "); fflush(stdout);
     _theta.load();
     printf("done\n");
-    printf("loading epsilon: "); fflush(stdout);
-    _epsilon.load();
-    printf("done\n"); 
-    printf("loading x: "); fflush(stdout);
-    _x.load();
-    printf("done\n"); 
     printf("loading beta: "); fflush(stdout);
     _beta.load();
     printf("done\n");
-
-    // load test users 
-    char buf[4096];
-    sprintf(buf, "%s/test_users.tsv", _env.datfname.c_str());
-    FILE *f = fopen(buf, "r");
-    assert(f);
-    _ratings.read_test_users(f, &_sampled_users);
-    fclose(f);
- 
-    // get and output rankings
-    _save_ranking_file = true;
-    printf("precision\n"); fflush(stdout);
-    precision();
+  }
+  
+  if (_env.use_ratings) {
+    printf("loading x: "); fflush(stdout);
+    _x.load();
+    printf("done\n"); 
+    printf("loading epsilon: "); fflush(stdout);
+    _epsilon.load();
     printf("done\n");
-
-    if (_env.use_docs) {
-      printf("coldstart local inference and HOL\n"); fflush(stdout);
-      coldstart_rating_likelihood();
-      printf("done\n");
-      printf("coldstart precision\n"); fflush(stdout);
-      coldstart_precision();
-    }
+  }
+  
+  // load test users 
+  char buf[4096];
+  sprintf(buf, "%s/test_users.tsv", _env.datfname.c_str());
+  FILE *f = fopen(buf, "r");
+  assert(f);
+  _ratings.read_test_users(f, &_sampled_users);
+  fclose(f);
+  
+  // get and output rankings
+  _save_ranking_file = true;
+  printf("precision\n"); fflush(stdout);
+  precision();
+  printf("done\n");
+  
+  if (_env.use_docs) {
+    printf("coldstart local inference and HOL\n"); fflush(stdout);
+    lerr("computing coldstart...");
+    coldstart_local_inference();
+    coldstart_rating_likelihood();
     printf("done\n");
-    printf("DONE writing ranking.tsv in output directory\n");
-
-    // get and output likelihood
-    bool validation=false;
-    bool experiment=true;
-    if(!compute_likelihood(validation)) {
-        save_model();
-        exit(0);
-    }
+    printf("coldstart precision\n"); fflush(stdout);
+    coldstart_precision();
+  }
+  printf("done\n");
+  printf("DONE writing ranking.tsv in output directory\n");
+  
+  // get and output likelihood
+  bool validation=false;
+  bool experiment=true;
+  if(!compute_likelihood(validation)) {
+    save_model();
+    exit(0);
+  }
 }
 
 void
@@ -790,23 +797,26 @@ CollabTM::batch_infer()
       compute_all_expectations();
     }
 
-    if (_iter % 10 == 0) {
+    if (_iter % _env.reportfreq == 0) {
       lerr("Iteration %d\n", _iter);
       approx_log_likelihood();
       if (_env.use_ratings) {
 	compute_likelihood(true);
 	compute_likelihood(false);
-      }
-      save_model();
-      if (_env.use_docs) {
-	coldstart_rating_likelihood();
-	coldstart_precision();
 	precision();
       }
+      save_model();
     }
     
-    if (_env.save_state_now)
-      exit(0);
+    if (_env.save_state_now) {
+      if (_env.use_ratings) {
+	compute_likelihood(true);
+	compute_likelihood(false);
+	precision();
+      }
+      save_model();
+      _env.save_state_now = 0;
+    }
 
     _iter++;
   }
@@ -2027,7 +2037,37 @@ CollabTM::coldstart_local_inference()
   // keep _beta fixed and compute theta for coldstart docs
   _cstheta->set_to_prior();
   _cstheta->set_to_prior_curr();
-  _cstheta->compute_expectations();
+  _theta.load_from_lda(_env.datfname, 0.1, _k);
+
+  // initialize cstheta from theta (assuming lda init)
+  if (_env.lda || _env.lda_init) {
+    for (MovieMap::const_iterator i = _cold_start_docs.begin(); 
+	 i != _cold_start_docs.end(); ++i) {
+      uint32_t doc = i->first;
+      
+      assert (_doc_to_cs_idmap.find(doc) != _doc_to_cs_idmap.end());
+      uint32_t docseq = _doc_to_cs_idmap[doc];
+
+      const double **tv = _theta.expected_v().const_data();
+      const double **tlogv = _theta.expected_logv().const_data();
+      double **cstv = _cstheta->expected_v().data();
+      double **cstlogv = _cstheta->expected_logv().data();
+      for (uint32_t k = 0; k < _k; ++k) {
+	cstv[docseq][k] = tv[doc][k];
+	cstlogv[docseq][k] = tlogv[doc][k];
+      }
+    }
+    printf("initialized cstheta from LDA");
+  } else 
+    _cstheta->compute_expectations();
+
+  // save it
+  _cstheta->save_state(_ratings.seq2movie());
+
+  // if LDA is held fixed, we don't need to do local inference
+  // simply use the initialized cs theta expectations
+  if (_env.lda && _env.fixed_doc_param)
+    return;
 
   Array betasum(_k);
   _beta.sum_rows(betasum);
@@ -2065,7 +2105,8 @@ CollabTM::coldstart_local_inference()
     _cstheta->swap();
     _cstheta->compute_expectations();
     itr++;
-  } while (itr < 3);
+    coldstart_rating_likelihood();
+  } while (itr < 10);
   
   // save it
   _cstheta->save_state(_ratings.seq2movie());
@@ -2077,9 +2118,6 @@ CollabTM::coldstart_rating_likelihood()
   if (!_env.use_docs)
     return;
 
-  lerr("computing coldstart local thetas");
-  coldstart_local_inference();
-  
   lerr("computing coldstart rating likelihood");
   // compute likelihood of "heldout" ratings
   // ALL ratings for a coldstart document are heldout
