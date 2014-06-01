@@ -742,23 +742,37 @@ CollabTM::batch_infer()
 	  assert (y > 0);
 	  
 	  if (_env.use_docs) {
-	    get_xi(nu, nd, xi, xi_a, xi_b);
-	    
-	    if (y > 1) {
-	      xi_a.scale(y);
-	      xi_b.scale(y);
-	      xi.scale(y);
-	    }
-	    
-	    if (!_env.fixed_doc_param)
-	      _theta.update_shape_next1(nd, xi_a);
-	    
-	    _epsilon.update_shape_next1(nd, xi_b);
-	    _x.update_shape_next1(nu, xi_a);
-	    _x.update_shape_next1(nu, xi_b);
-	    
-	    if (!_env.fixeda)
-	      _a.update_shape_next(nd, (double)y); // since \sum_k \xi_k = 1
+      if (!_env.content_only) { 
+        get_xi(nu, nd, xi, xi_a, xi_b);
+        
+        if (y > 1) {
+          xi_a.scale(y);
+          xi_b.scale(y);
+          xi.scale(y);
+        }
+        
+        if (!_env.fixed_doc_param)
+          _theta.update_shape_next1(nd, xi_a);
+        
+        _epsilon.update_shape_next1(nd, xi_b);
+        _x.update_shape_next1(nu, xi_a);
+        _x.update_shape_next1(nu, xi_b);
+      }
+      else { // _env.content_only 
+        get_phi(_x, nu, _theta, nd, phi);
+        
+        if (y > 1)
+          phi.scale(y);
+        
+        if (!_env.fixed_doc_param)
+          _theta.update_shape_next1(nd, phi);
+        
+        _x.update_shape_next1(nu, phi);
+        
+      }
+        
+        if (!_env.fixeda)
+          _a.update_shape_next(nd, y); // since \sum_k \xi_k = 1
 
 	  } else { // ratings only
 
@@ -929,6 +943,7 @@ CollabTM::online_infer()
                     assert (y > 0);
 
                     if (_env.use_docs) {
+                        assert(_env.content_only == false);
                         get_xi(nu, nd, xi, xi_a, xi_b);
 
                         if (y > 1) {
