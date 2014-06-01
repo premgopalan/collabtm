@@ -80,7 +80,6 @@ main(int argc, char **argv)
   bool content_only = false; 
 
   uint32_t nusers, ndocs, nvocab;
-  bool lda = false;
   bool lda_init = false;
   bool ppc = false;
   bool seq_init = false;
@@ -181,8 +180,6 @@ main(int argc, char **argv)
       use_ratings = true;
     } else if (strcmp(argv[i], "-init0") == 0) {
       perturb_only_beta_shape = true;
-    } else if (strcmp(argv[i], "-lda") == 0) {
-      lda = true;
     } else if (strcmp(argv[i], "-lda-init") == 0) {
       lda_init = true;
     } else if (strcmp(argv[i], "-ppc") == 0) {
@@ -214,7 +211,7 @@ main(int argc, char **argv)
 	  batch, binary_data, vb, explore, 
 	  fixeda, vbinit, vbinit_iterations,
 	  use_docs, use_ratings, perturb_only_beta_shape,
-	  lda, lda_init, ppc, seq_init, seq_init_samples,
+	  lda_init, ppc, seq_init, seq_init_samples,
 	  fixed_doc_param, phased, content_only);
   
   env_global = &env;

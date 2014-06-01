@@ -69,7 +69,7 @@ public:
       uint32_t vbinit_iterations, 
       bool doc_only, bool ratings_only,
       bool perturb_only_beta_shape,
-      bool lda, bool lda_init, bool ppc, 
+      bool lda_init, bool ppc, 
       bool seq_init, bool seq_init_samples,
       bool fixed_doc_param, bool phased, bool content_only);
 
@@ -121,7 +121,6 @@ public:
   bool use_docs;
   bool use_ratings;
   bool perturb_only_beta_shape;
-  bool lda;
   bool lda_init;
   bool ppc;
   bool seq_init;
@@ -224,7 +223,7 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
 	 uint32_t vbinit_iterations,
 	 bool use_docv, bool use_ratingsv,
 	 bool perturb_only_beta_shapev,
-	 bool ldav, bool lda_initv, bool ppcv,
+	 bool lda_initv, bool ppcv,
 	 bool seq_initv, bool seq_init_samplesv,
 	 bool fixed_doc_paramv, bool phasedv, bool content_onlyv)
   : dataset(datasetv),
@@ -266,7 +265,6 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
     use_docs(use_docv),
     use_ratings(use_ratingsv),
     perturb_only_beta_shape(perturb_only_beta_shapev),
-    lda(ldav),
     lda_init(lda_initv),
     ppc(ppcv),
     seq_init(seq_initv), 
@@ -316,9 +314,6 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
 
   if (perturb_only_beta_shape)
     sa << "-init0";
-  
-  if (lda)
-    sa << "-lda";
 
   if (lda_init)
     sa << "-ldainit";
@@ -367,7 +362,6 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
   plog("use_docs", use_docs);
   plog("use_ratings", use_ratings);
   plog("perturb_only_beta_shape", perturb_only_beta_shape);
-  plog("lda", lda);
   plog("lda-init", lda_init);
   plog("seq-init", seq_init);
   plog("seq-init-samples", seq_init_samples);

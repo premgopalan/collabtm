@@ -84,10 +84,7 @@ void
 CollabTM::initialize()
 {
   if (_env.use_docs) {
-    if (_env.lda) { // fix lda topics and doc memberships
-
-      // beta and theta are fixed after loading
-      assert (_env.fixed_doc_param);
+    if (_env.lda_init) { // fix lda topics and doc memberships
 
       _beta.set_to_prior_curr();
       _beta.set_to_prior();
@@ -98,17 +95,6 @@ CollabTM::initialize()
       _beta.load_from_lda(_env.datfname, 0.01, _k); // eek! fixme.
       _theta.load_from_lda(_env.datfname, 0.1, _k);
       lerr("loaded lda fits");
-      
-    } else if (_env.lda_init) { // lda based init
-      
-      _beta.set_to_prior_curr();
-      _beta.set_to_prior();
-
-      _theta.set_to_prior_curr();
-      _theta.set_to_prior();
-      
-      _beta.load_from_lda(_env.datfname, 0.01, _k); // eek! fixme.
-      _theta.load_from_lda(_env.datfname, 0.1, _k);
 
     } else { // random init
       
@@ -1979,7 +1965,7 @@ CollabTM::coldstart_per_rating_prediction(uint32_t user, uint32_t doc) const
   double item_contrib = 0;
   for (uint32_t k = 0; k < _k; ++k) {
     if (!_env.content_only)
-      item_contrib = (etheta[docseq][k]); // + eepsilon[doc][k]);
+      item_contrib = (etheta[docseq][k] + eepsilon[doc][k]);
     else
       item_contrib = etheta[docseq][k];
     s += item_contrib * ex[user][k];
@@ -2040,7 +2026,7 @@ CollabTM::coldstart_local_inference()
   _theta.load_from_lda(_env.datfname, 0.1, _k);
 
   // initialize cstheta from theta (assuming lda init)
-  if (_env.lda || _env.lda_init) {
+  if (_env.lda_init) {
     for (MovieMap::const_iterator i = _cold_start_docs.begin(); 
 	 i != _cold_start_docs.end(); ++i) {
       uint32_t doc = i->first;
@@ -2066,7 +2052,7 @@ CollabTM::coldstart_local_inference()
 
   // if LDA is held fixed, we don't need to do local inference
   // simply use the initialized cs theta expectations
-  if (_env.lda && _env.fixed_doc_param)
+  if (_env.fixed_doc_param)
     return;
 
   Array betasum(_k);
