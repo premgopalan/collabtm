@@ -78,6 +78,7 @@ main(int argc, char **argv)
   bool use_ratings = true;
   bool perturb_only_beta_shape = false;
   bool content_only = false; 
+  bool decoupled = false;
 
   uint32_t nusers, ndocs, nvocab;
   bool lda_init = false;
@@ -196,6 +197,8 @@ main(int argc, char **argv)
       to_mult = true;
     } else if (strcmp(argv[i], "-content-only") == 0) {
       content_only = true;
+    } else if (strcmp(argv[i], "-decoupled") == 0) {
+      decoupled = true;
     } else if (i > 0) {
       fprintf(stdout,  "error: unknown option %s\n", argv[i]);
       assert(0);
@@ -212,7 +215,8 @@ main(int argc, char **argv)
 	  fixeda, vbinit, vbinit_iterations,
 	  use_docs, use_ratings, perturb_only_beta_shape,
 	  lda_init, ppc, seq_init, seq_init_samples,
-	  fixed_doc_param, phased, content_only);
+	  fixed_doc_param, phased, content_only,
+	  decoupled);
   
   env_global = &env;
   if (p) {

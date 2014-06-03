@@ -71,7 +71,8 @@ public:
       bool perturb_only_beta_shape,
       bool lda_init, bool ppc, 
       bool seq_init, bool seq_init_samples,
-      bool fixed_doc_param, bool phased, bool content_only);
+      bool fixed_doc_param, bool phased, bool content_only,
+      bool decoupled);
 
   ~Env() { fclose(_plogf); }
 
@@ -128,6 +129,7 @@ public:
   bool fixed_doc_param;
   bool phased;
   bool content_only; 
+  bool decoupled;
 
   template<class T> static void plog(string s, const T &v);
   static string file_str(string fname);
@@ -225,7 +227,8 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
 	 bool perturb_only_beta_shapev,
 	 bool lda_initv, bool ppcv,
 	 bool seq_initv, bool seq_init_samplesv,
-	 bool fixed_doc_paramv, bool phasedv, bool content_onlyv)
+	 bool fixed_doc_paramv, bool phasedv, bool content_onlyv,
+	 bool decoupledv)
   : dataset(datasetv),
     ndocs(ndocs_v),
     nvocab(nvocab_v),
@@ -271,7 +274,8 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
     seq_init_samples(seq_init_samplesv),
     fixed_doc_param(fixed_doc_paramv),
     phased(phasedv),
-    content_only(content_onlyv)
+    content_only(content_onlyv),
+    decoupled(decoupledv)
 {
   ostringstream sa;
   sa << "nusers" << nusers << "-";
@@ -333,6 +337,9 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
   if (content_only)
     sa << "-content-only"; 
 
+  if (decoupled)
+    sa << "-decoupled";
+
   prefix = sa.str();
   level = Logger::TEST;
 
@@ -368,6 +375,7 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
   plog("phased", phased);
   plog("fixed_doc_param", fixed_doc_param); 
   plog("content_only", content_only);
+  plog("decoupled", decoupled);
  
   //string ndatfname = file_str("/network.dat");
   //unlink(ndatfname.c_str());

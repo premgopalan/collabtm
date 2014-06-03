@@ -16,6 +16,7 @@ CollabTM::CollabTM(Env &env, Ratings &ratings)
     _theta("theta", 0.3, 0.3, _ndocs,_k,&_r),
     _beta("beta", 0.3, 0.3, _nvocab,_k,&_r),
     _x("x", 0.3, 0.3, _nusers,_k,&_r),
+    _xd("xd", 0.3, 0.3, _nusers,_k,&_r),
     _epsilon("epsilon", 0.3, 0.3, _ndocs,_k,&_r),
     _a("a", 0.3, 0.3, _ndocs, &_r),
     _cstheta(NULL), 
@@ -109,33 +110,50 @@ CollabTM::initialize()
   if (_env.use_ratings) {
 
     if (_env.use_docs) {
-      /* 
-      //XXX: this just sets to prior, which is OK if
-      // some part of the model was perturbed randomly
-      // but with LDA initialization, nothing is
 
-      _x.set_to_prior();
-      _x.set_to_prior_curr();
-      
-      _epsilon.set_to_prior();
-      _epsilon.set_to_prior_curr();
+      // if lda init, then random init the x, epsilon
+      // else set to prior
+      if (!_env.lda_init) {
+	_x.set_to_prior();
+	_x.set_to_prior_curr();
+	
+	_epsilon.set_to_prior();
+	_epsilon.set_to_prior_curr();
+	
+	_x.compute_expectations();
+	_epsilon.compute_expectations();
 
-      _x.compute_expectations();
-      _epsilon.compute_expectations();
-      */
+	if (_env.decoupled) {
+	  _xd.set_to_prior();
+	  _xd.set_to_prior_curr();
+	  _xd.compute_expectations();
+	}
+	
 
-      _x.initialize();
-      _epsilon.initialize();
+      } else {
 
-      _x.initialize_exp();
-      _epsilon.initialize_exp();
-
-      if (!_env.fixeda) {
-	_a.set_to_prior();
-	_a.set_to_prior_curr();
-	_a.compute_expectations();
+	if (_env.decoupled) {
+	  _xd.initialize();
+	  _xd.initialize_exp();
+	}
+	
+	_x.initialize();
+	_epsilon.initialize();
+	
+	_x.initialize_exp();
+	_epsilon.initialize_exp();
+	
+	if (!_env.fixeda) {
+	  _a.set_to_prior();
+	  _a.set_to_prior_curr();
+	  _a.compute_expectations();
+	}
       }
-    } else {
+      
+    } else { // ratings only
+
+      assert (!_env.decoupled);
+
       _x.initialize();
       _epsilon.initialize();
 
@@ -146,6 +164,7 @@ CollabTM::initialize()
 	_a.initialize();
 	_a.compute_expectations();
       }
+
     }
     
   }
@@ -166,8 +185,10 @@ CollabTM::initialize_perturb_betas()
   if (_env.use_ratings) {
     _x.set_to_prior_curr();
     _x.set_to_prior();
+    
     _epsilon.set_to_prior_curr();
     _epsilon.set_to_prior();
+
     _x.compute_expectations();
     _epsilon.compute_expectations();
 
@@ -418,6 +439,11 @@ CollabTM::gen_ranking_for_users()
     printf("loading epsilon: "); fflush(stdout);
     _epsilon.load();
     printf("done\n");
+    if (_env.decoupled) {
+      printf("loading xd: "); fflush(stdout);
+      _xd.load();
+      printf("done\n");
+    }
   }
   
   // load test users 
@@ -660,6 +686,37 @@ CollabTM::get_xi(uint32_t nu, uint32_t nd,
 }
 
 void
+CollabTM::get_xi_decoupled(uint32_t nu, uint32_t nd, 
+			   Array &xi,
+			   Array &xi_a,
+			   Array &xi_b)
+{
+  assert (xi.size() == 2 *_k && xi_a.size() == _k && xi_b.size() == _k);
+  assert (_env.decoupled);
+  assert (!_env.content_only);
+
+  const double  **elogx = _x.expected_logv().const_data();
+  const double  **elogxd = _xd.expected_logv().const_data();
+  const double  **elogtheta = _theta.expected_logv().const_data();
+  const double  **elogepsilon = _epsilon.expected_logv().const_data();
+  xi.zero();
+  for (uint32_t k = 0; k < 2*_k; ++k) {
+    if (k < _k)
+      xi[k] = elogx[nu][k] + elogtheta[nd][k];
+    else {
+      uint32_t t = k - _k;
+      xi[k] = elogxd[nu][t] + elogepsilon[nd][t];
+    }
+  }
+  xi.lognormalize();
+  for (uint32_t k = 0; k < 2*_k; ++k) 
+    if (k < _k)
+      xi_a[k] = xi[k];
+    else
+      xi_b[k-_k] = xi[k];
+}
+
+void
 CollabTM::seq_init()
 {
   seq_init_helper();
@@ -711,6 +768,11 @@ CollabTM::seq_init()
 void
 CollabTM::batch_infer()
 {
+  if (_env.decoupled)  {
+    assert (_env.use_ratings && _env.use_docs);
+    assert (!_env.content_only);
+  }
+
   if (!_env.seq_init && !_env.seq_init_samples) {
     if (_env.perturb_only_beta_shape)
       initialize_perturb_betas();
@@ -802,7 +864,11 @@ CollabTM::batch_infer()
 	  
 	  if (_env.use_docs) {
       if (!_env.content_only) { 
-        get_xi(nu, nd, xi, xi_a, xi_b);
+
+	if (_env.decoupled)
+	  get_xi_decoupled(nu, nd, xi, xi_a, xi_b);
+	else
+	  get_xi(nu, nd, xi, xi_a, xi_b);
         
         if (y > 1) {
           xi_a.scale(y);
@@ -815,9 +881,14 @@ CollabTM::batch_infer()
         
         _epsilon.update_shape_next1(nd, xi_b);
         _x.update_shape_next1(nu, xi_a);
-        _x.update_shape_next1(nu, xi_b);
+
+	if (_env.decoupled)
+	  _xd.update_shape_next1(nu, xi_b);
+	else
+	  _x.update_shape_next1(nu, xi_b);
       }
       else { // _env.content_only 
+	assert (!_env.decoupled);
         get_phi(_x, nu, _theta, nd, phi);
         
         if (y > 1)
@@ -868,12 +939,7 @@ CollabTM::batch_infer()
     }
     
     if (_env.save_state_now) {
-      if (_env.use_ratings) {
-	compute_likelihood(true);
-	compute_likelihood(false);
-	precision();
-      }
-      save_model();
+      do_on_stop();
       _env.save_state_now = 0;
     }
 
@@ -1333,8 +1399,8 @@ CollabTM::update_all_rates_in_seq()
     _theta.update_rate_next(betasum);
   }
   
-  Array xsum(_k);
   if (_env.use_ratings) {
+    Array xsum(_k);
     _x.sum_rows(xsum);
     if (!_env.fixed_doc_param)
       if (_env.fixeda)
@@ -1373,17 +1439,38 @@ CollabTM::update_all_rates_in_seq()
       _epsilon.sum_rows(scaledepsilonsum);
     
     _x.update_rate_next(scaledthetasum);
-    if (!_env.content_only)
-      _x.update_rate_next(scaledepsilonsum);
+    if (!_env.content_only) {
+      if (_env.decoupled)
+	_xd.update_rate_next(scaledepsilonsum);
+      else
+	_x.update_rate_next(scaledepsilonsum);
+    }
     
     _x.swap();
     _x.compute_expectations();
+
+    if (_env.decoupled) {
+      _xd.swap();
+      _xd.compute_expectations();
+    }
     
     // update epsilon rate
-    if (_env.fixeda)
-      _epsilon.update_rate_next(xsum);
-    else
-      _epsilon.update_rate_next(xsum, _a.expected_v());
+    Array xsum(_k);
+    Array xdsum(_k);
+
+    if (_env.decoupled) {
+      _xd.sum_rows(xdsum);
+      if (_env.fixeda)
+	_epsilon.update_rate_next(xdsum);
+      else
+	_epsilon.update_rate_next(xdsum, _a.expected_v());
+    } else {
+      _x.sum_rows(xsum);
+      if (_env.fixeda)
+	_epsilon.update_rate_next(xsum);
+      else
+	_epsilon.update_rate_next(xsum, _a.expected_v());
+    }
     
     _epsilon.swap();
     _epsilon.compute_expectations();
@@ -1395,12 +1482,18 @@ CollabTM::update_all_rates_in_seq()
       const double **theta_evd = theta_ev.const_data();
       Matrix &epsilon_ev = _epsilon.expected_v();
       const double **epsilon_evd = epsilon_ev.const_data();
-      for (uint32_t nd = 0; nd < _ndocs; ++nd)
-	for (uint32_t k = 0; k < _k; ++k)
-    if (!_env.content_only)
-      arate[nd] += xsum[k] * (theta_evd[nd][k] + epsilon_evd[nd][k]);
-    else
-      arate[nd] += xsum[k] * theta_evd[nd][k];
+      for (uint32_t nd = 0; nd < _ndocs; ++nd) {
+	for (uint32_t k = 0; k < _k; ++k) {
+	  if (_env.decoupled) {
+	    arate[nd] += xsum[k] * theta_evd[nd][k] + xdsum[k]  * epsilon_evd[nd][k];
+	  } else {
+	    if (!_env.content_only)
+	      arate[nd] += xsum[k] * (theta_evd[nd][k] + epsilon_evd[nd][k]);
+	    else
+	      arate[nd] += xsum[k] * theta_evd[nd][k];
+	  }
+	}
+      }
       _a.update_rate_next(arate);
       _a.swap();
       _a.compute_expectations();
@@ -1420,6 +1513,8 @@ CollabTM::swap_all()
     if (!_env.fixeda)
       _a.swap();
     _x.swap();
+    if (_env.decoupled)
+      _xd.swap();
   }
 }
 
@@ -1436,6 +1531,8 @@ CollabTM::compute_all_expectations()
     if (!_env.fixeda)
       _a.compute_expectations();
     _x.compute_expectations();
+    if (_env.decoupled)
+      _xd.compute_expectations();
   }
 }
 
@@ -1560,6 +1657,8 @@ CollabTM::save_model()
     printf("saving ratings state\n");
     fflush(stdout);
     _x.save_state(_ratings.seq2user());
+    if (_env.decoupled)
+      _xd.save_state(_ratings.seq2user());
     _epsilon.save_state(_ratings.seq2movie());
 
     if (!_env.fixeda) 
@@ -1995,28 +2094,33 @@ CollabTM::per_rating_prediction(uint32_t user, uint32_t doc) const
   //const double ** elogbeta = _beta.expected_logv().const_data();
   
   const double ** ex = _x.expected_v().const_data();
-  //const double ** elogx = _x.expected_logv().const_data();
+  const double ** exd = _xd.expected_v().const_data();
   const double ** eepsilon = _epsilon.expected_v().const_data();
-  //const double ** elogepsilon = _epsilon.expected_logv().const_data();
   
   const double *ea = _env.fixeda? NULL : _a.expected_v().const_data();
   //const double *eloga = _env.fixeda ? NULL : _a.expected_logv().const_data();
 
-
-  
-  
-
   double s = .0;
-  double item_contrib = 0;
-  for (uint32_t k = 0; k < _k; ++k) {
-    if (!_env.content_only)
-      item_contrib = (etheta[doc][k] + eepsilon[doc][k]); 
-    else
-      item_contrib = etheta[doc][k]; 
-    if (!_env.fixeda)
-      s +=  item_contrib * ea[doc] * ex[user][k];
-    else
-      s += item_contrib * ex[user][k];
+  
+  if (_env.decoupled) {
+    for (uint32_t k = 0; k < _k; ++k) {
+      if (!_env.fixeda)
+	s +=  ea[doc] * (ex[user][k] * etheta[doc][k] + exd[user][k] * eepsilon[doc][k]);
+      else
+	s += ex[user][k] * etheta[doc][k] + exd[user][k] * eepsilon[doc][k];
+    }
+  } else {
+    double item_contrib = 0;
+    for (uint32_t k = 0; k < _k; ++k) {
+      if (!_env.content_only)
+	item_contrib = (etheta[doc][k] + eepsilon[doc][k]); 
+      else
+	item_contrib = etheta[doc][k]; 
+      if (!_env.fixeda)
+	s +=  item_contrib * ea[doc] * ex[user][k];
+      else
+	s += item_contrib * ex[user][k];
+    }
   }
     
   if (s < 1e-30)
@@ -2028,10 +2132,11 @@ CollabTM::per_rating_prediction(uint32_t user, uint32_t doc) const
 double
 CollabTM::coldstart_per_rating_prediction(uint32_t user, uint32_t doc) const
 {
-  assert (_env.fixeda);
   assert (_cstheta);
   const double ** etheta = _cstheta->expected_v().const_data();
   const double ** ex = _x.expected_v().const_data();
+  const double ** exd = _xd.expected_v().const_data();
+  const double *ea = _env.fixeda? NULL : _a.expected_v().const_data();
   const double ** eepsilon = _epsilon.expected_v().const_data();
   
   IDMap::const_iterator itr = _doc_to_cs_idmap.find(doc);
@@ -2039,13 +2144,22 @@ CollabTM::coldstart_per_rating_prediction(uint32_t user, uint32_t doc) const
   uint32_t docseq = itr->second;
   
   double s = .0;
-  double item_contrib = 0;
-  for (uint32_t k = 0; k < _k; ++k) {
-    if (!_env.content_only)
-      item_contrib = (etheta[docseq][k] + eepsilon[doc][k]);
-    else
-      item_contrib = etheta[docseq][k];
-    s += item_contrib * ex[user][k];
+  if (_env.decoupled) {
+    for (uint32_t k = 0; k < _k; ++k) {
+      if (!_env.fixeda)
+	s += ea[doc] * (ex[user][k] * etheta[docseq][k] + exd[user][k] * eepsilon[doc][k]);
+      else
+	s += (ex[user][k] * etheta[docseq][k] + exd[user][k] * eepsilon[doc][k]);
+    }
+  } else {
+    double item_contrib = 0;
+    for (uint32_t k = 0; k < _k; ++k) {
+      if (!_env.content_only)
+	item_contrib = (etheta[docseq][k] + eepsilon[doc][k]);
+      else
+	item_contrib = etheta[docseq][k];
+      s += item_contrib * ex[user][k];
+    }
   }
   if (s < 1e-30)
     s = 1e-30;

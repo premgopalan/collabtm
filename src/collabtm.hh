@@ -31,6 +31,10 @@ private:
 	      Array &xi,
 	      Array &xi_a, 
 	      Array &x_b);
+  void get_xi_decoupled(uint32_t nu, uint32_t nd, 
+			Array &xi,
+			Array &xi_a, 
+			Array &x_b);
   void update_all_rates();
   void update_all_rates_in_seq();
   void stochastic_update_all_rates_in_seq(UserMap &sampled_words); 
@@ -79,10 +83,11 @@ private:
   GPMatrix _theta;
   GPMatrixGR _beta;
   GPMatrixGR _x;
+  GPMatrixGR _xd;
   GPMatrix _epsilon;
   GPArray _a;
   GPMatrix *_cstheta; // coldstart docs
-
+  
   uint32_t _start_time;
   gsl_rng *_r;
   FILE *_af;
