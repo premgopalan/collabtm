@@ -61,6 +61,7 @@ private:
   double coldstart_per_rating_prediction(uint32_t user, uint32_t doc) const;
 
   bool is_validation(const Rating &r) const;
+  void do_on_stop();
 
   Env &_env;
   Ratings &_ratings;

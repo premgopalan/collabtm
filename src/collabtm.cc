@@ -109,6 +109,11 @@ CollabTM::initialize()
   if (_env.use_ratings) {
 
     if (_env.use_docs) {
+      /* 
+      //XXX: this just sets to prior, which is OK if
+      // some part of the model was perturbed randomly
+      // but with LDA initialization, nothing is
+
       _x.set_to_prior();
       _x.set_to_prior_curr();
       
@@ -117,6 +122,13 @@ CollabTM::initialize()
 
       _x.compute_expectations();
       _epsilon.compute_expectations();
+      */
+
+      _x.initialize();
+      _epsilon.initialize();
+
+      _x.initialize_exp();
+      _epsilon.initialize_exp();
 
       if (!_env.fixeda) {
 	_a.set_to_prior();
@@ -379,12 +391,24 @@ CollabTM::gen_ranking_for_users()
 {
     // load rating prediction parameters
   if (_env.use_docs) {
-    printf("loading theta: "); fflush(stdout);
-    _theta.load();
-    printf("done\n");
-    printf("loading beta: "); fflush(stdout);
-    _beta.load();
-    printf("done\n");
+
+    if (_env.lda_init && _env.fixed_doc_param) {
+      _beta.set_to_prior_curr();
+      _beta.set_to_prior();
+
+      _theta.set_to_prior_curr();
+      _theta.set_to_prior();
+
+      _beta.load_from_lda(_env.datfname, 0.01, _k); // eek! fixme.
+      _theta.load_from_lda(_env.datfname, 0.1, _k);
+    } else {
+      printf("loading theta: "); fflush(stdout);
+      _theta.load();
+      printf("done\n");
+      printf("loading beta: "); fflush(stdout);
+      _beta.load();
+      printf("done\n");
+    }
   }
   
   if (_env.use_ratings) {
@@ -421,6 +445,8 @@ CollabTM::gen_ranking_for_users()
   }
   printf("done\n");
   printf("DONE writing ranking.tsv in output directory\n");
+
+  save_model();
   
   // get and output likelihood
   bool validation=false;
@@ -429,6 +455,39 @@ CollabTM::gen_ranking_for_users()
     save_model();
     exit(0);
   }
+}
+
+void
+CollabTM::do_on_stop()
+{
+  // load test users 
+  _sampled_users.clear();
+  char buf[4096];
+  sprintf(buf, "%s/test_users.tsv", _env.datfname.c_str());
+  FILE *f = fopen(buf, "r");
+  assert(f);
+  _ratings.read_test_users(f, &_sampled_users);
+  fclose(f);
+  
+  // get and output rankings
+  _save_ranking_file = true;
+  printf("precision\n"); fflush(stdout);
+  precision();
+  printf("done\n");
+  
+  if (_env.use_docs) {
+    printf("coldstart local inference and HOL\n"); fflush(stdout);
+    lerr("computing coldstart...");
+    coldstart_local_inference();
+    coldstart_rating_likelihood();
+    printf("done\n");
+    printf("coldstart precision\n"); fflush(stdout);
+    coldstart_precision();
+  }
+  printf("done\n");
+  printf("DONE writing ranking.tsv in output directory\n");
+
+  save_model();
 }
 
 void
@@ -674,7 +733,7 @@ CollabTM::batch_infer()
 	    
   while (1) {
     if (_env.phased)
-      if (_iter < 200) {
+      if (_iter < 100) {
 	_env.fixed_doc_param = false;
 	_env.use_docs = true;
 	_env.use_ratings = false;
@@ -1507,7 +1566,7 @@ CollabTM::save_model()
       _a.save_state(_ratings.seq2movie());
   }
 
-  if (_env.use_docs) {
+  if (_env.use_docs && !_env.fixed_doc_param) {
     _theta.save_state(_ratings.seq2movie());
     _beta.save_state(idmap);
   }
@@ -1640,9 +1699,8 @@ CollabTM::compute_likelihood(bool validation)
 	  _iter, duration(), a, why);
   fclose(f);
   if (stop) {
-    save_model();
+    do_on_stop();
     exit(0);
-    //return false; 
   }
   return true;
 }
@@ -1943,6 +2001,10 @@ CollabTM::per_rating_prediction(uint32_t user, uint32_t doc) const
   
   const double *ea = _env.fixeda? NULL : _a.expected_v().const_data();
   //const double *eloga = _env.fixeda ? NULL : _a.expected_logv().const_data();
+
+
+  
+  
 
   double s = .0;
   double item_contrib = 0;

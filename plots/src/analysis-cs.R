@@ -8,7 +8,7 @@ theme_set(theme_bw())
 ########################################
 # function to compute precision at various number of recommendations by user
 ########################################
-compute.precision.by.user <- function(recommendations, users, num.recs=seq(10,100,10)) {
+compute.precision.by.user <- function(recommendations, users, num.recs=seq(10,50,10)) {
   precision.by.user <- ddply(recommendations, "user", function (df) {
     df <- df[order(-df$predicted), ]
     df$hits <- cumsum(df$actual)
@@ -21,7 +21,7 @@ compute.precision.by.user <- function(recommendations, users, num.recs=seq(10,10
 ########################################
 # function to compute number of hits (# recs in the test set) by user
 ########################################
-compute.hits.by.user <- function(recommendations, num.recs=seq(10,100,10)) {
+compute.hits.by.user <- function(recommendations, num.recs=seq(10,50,10)) {
   hits.by.user <- ddply(recommendations, "user", function (df) {
     df <- df[order(-df$predicted), ]
     df$hits <- cumsum(df$actual)
@@ -33,7 +33,7 @@ compute.hits.by.user <- function(recommendations, num.recs=seq(10,100,10)) {
 ########################################
 # function to compute coverage at various number of recommendations by item
 ########################################
-compute.coverage.by.item <- function(recommendations, items, num.recs=seq(10,100,10)) {
+compute.coverage.by.item <- function(recommendations, items, num.recs=seq(10,50,10)) {
   # get item rank for each hit by user
   hits <- ddply(recommendations, "user", function(df) {
     df <- df[order(-df$predicted), ]
@@ -73,7 +73,7 @@ if (length(args) > 0) {
 }
 
 # compute precision and coverage, writing to separate data frames
-for (dataset in c("mendeley")) {
+for (dataset in c("mendeley-cs")) {
   # read user activity and item popularity
   users.file <- sprintf('../data/%s/users.tsv', dataset)
   users <- read.delim(users.file, sep='\t', header=F, col.names=c('user','activity'))
@@ -83,7 +83,7 @@ for (dataset in c("mendeley")) {
   test.users <- read.delim(test.users.file, sep='\t', header=F, col.names=c('user','num.test.items'))
 
   # notes:
-  for (method in c("ctpf-cs", "ctr-cs")) {
+  for (method in c("ctpf-lda", "ctpf", "ctr", "lda")) {
     for (K in ranks) {
       ranking.file <- sprintf('../output/%s/%s/ranking.tsv', dataset, method)
       prec.file <- sprintf('../output/%s/%s/precision.txt', dataset, method)
@@ -98,10 +98,10 @@ for (dataset in c("mendeley")) {
         hits.by.user <- compute.hits.by.user(predictions)
 
         precision.by.user <- merge(hits.by.user, users, by="user", all.x=T)
-        #precision.by.user <- transform(precision.by.user, precision=hits/num.recs)
+        precision.by.user <- transform(precision.by.user, precision=hits/num.recs)
         precision.by.user <- merge(precision.by.user, test.users, by="user", all.x=T)
-	precision.by.user$precision <- apply(precision.by.user[,c('num.test.items','num.recs')],1,min)
-        precision.by.user <- transform(precision.by.user, precision=hits/precision)
+	#precision.by.user$precision <- apply(precision.by.user[,c('num.test.items','num.recs')],1,min)
+        #precision.by.user <- transform(precision.by.user, precision=hits/precision)
         precision.by.user$method <- toupper(method)
         precision.by.user$K <- K
         precision.by.user$dataset <- dataset

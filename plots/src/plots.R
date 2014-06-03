@@ -5,7 +5,7 @@ require(scales)
 
 theme_set(theme_bw())
 
-methods <- c("CTR-CS", "CTPF-CS")
+methods <- c("CTPF-LDA", "CTR", "PF", "LDA")
 datasets <- c("mendeley"="Mendeley")
 
 ########################################
@@ -32,9 +32,9 @@ plot.data <- ddply(users, c("dataset","activity"), summarize, num.users=length(u
 p <- ggplot(data=plot.data, aes(x=activity, y=num.users))
 p <- p + geom_point()
 p <- p + scale_x_log10(labels=comma, breaks=10^(0:4)) + scale_y_log10(labels=comma, breaks=10^(0:6))
-p <- p + facet_wrap(~ dataset, nrow=1)
+#p <- p + facet_wrap(~ dataset, nrow=1)
 p <- p + xlab('User activity') + ylab('Number of users')
-ggsave(p, filename='../output/figures/user_activity.pdf', width=10, height=2.5)
+ggsave(p, filename='../output/figures/user_activity.pdf', width=4, height=2.5)
 p
 
 # plot cdf of user activity by dataset
@@ -44,9 +44,9 @@ p <- ggplot(data=plot.data, aes(x=activity, y=frac.users))
 p <- p + geom_line()
 p <- p + scale_x_log10(labels=comma, breaks=10^(0:3))
 p <- p + scale_y_continuous(labels=percent)
-p <- p + facet_wrap(~ dataset, nrow=1)
+#p <- p + facet_wrap(~ dataset, nrow=1)
 p <- p + xlab('Number of user views') + ylab('Fraction of users')
-ggsave(p, filename='../output/figures/user_activity_cdf.pdf', width=10, height=2.5)
+ggsave(p, filename='../output/figures/user_activity_cdf.pdf', width=4, height=2.5)
 p
 
 
@@ -73,9 +73,9 @@ plot.data <- ddply(items, c("dataset","popularity"), summarize, num.items=length
 p <- ggplot(data=plot.data, aes(x=popularity, y=num.items))
 p <- p + geom_point()
 p <- p + scale_x_log10(labels=comma, breaks=10^(0:4)) + scale_y_log10(labels=comma, breaks=10^(0:6))
-p <- p + facet_wrap(~ dataset, nrow=1)
+#p <- p + facet_wrap(~ dataset, nrow=1)
 p <- p + xlab('Item popularity') + ylab('Number of items')
-ggsave(p, filename='../output/figures/item_popularity.pdf', width=10, height=2.5)
+ggsave(p, filename='../output/figures/item_popularity.pdf', width=4, height=2.5)
 p
 
 # plot cdf of item popularity by dataset
@@ -85,9 +85,9 @@ p <- ggplot(data=plot.data, aes(x=popularity, y=frac.items))
 p <- p + geom_line()
 p <- p + scale_x_log10(labels=comma, breaks=10^(0:4))
 p <- p + scale_y_continuous(labels=percent)
-p <- p + facet_wrap(~ dataset, nrow=1)
+#p <- p + facet_wrap(~ dataset, nrow=1)
 p <- p + xlab('Number of item views') + ylab('Fraction of items')
-ggsave(p, filename='../output/figures/item_popularity_cdf.pdf', width=10, height=2.5)
+ggsave(p, filename='../output/figures/item_popularity_cdf.pdf', width=4, height=2.5)
 p
 
 ########################################
@@ -102,7 +102,7 @@ for (dataset in names(datasets)) {
 
   # notes:
 
-  for (method in c("ctr-cs", "ctpf-cs")) {
+  for (method in c("ctpf-lda", "ctr", "pf", "lda")) {
       tsv <- sprintf('../output/%s/%s/precision.txt', dataset, method)
       if (file.exists(tsv)) {
         print(tsv)
@@ -155,12 +155,12 @@ plot.data <- ddply(plot.data, c("dataset","method","K","num.recs"), summarize, m
 p <- ggplot(plot.data, aes(x=dataset, y=mean.precision))
 p <- p + geom_point(aes(color=method), size=1, show_guide=F)
 p <- p + geom_hline(aes(yintercept=mean.precision, colour=method, linetype=method), size=1, show_guide=T)
-p <- p + facet_wrap(~ dataset, nrow=1, scale="free")
-p <- p + xlab("") + ylab('Mean normalized precision')
+#p <- p + facet_wrap(~ dataset, nrow=1, scale="free")
+p <- p + xlab("") + ylab('Mean precision')
 p <- p + scale_y_continuous(labels=percent)
 p <- p + theme(legend.title=element_blank())
 p <- p + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank(), axis.title.x=element_blank())
-ggsave(p, filename=sprintf('../output/figures/mean_precision_at_%d.pdf', N), width=10, height=2.5)
+ggsave(p, filename=sprintf('../output/figures/mean_precision_at_%d.pdf', N), width=4, height=2.5)
 p
 
 
@@ -170,12 +170,12 @@ plot.data <- ddply(plot.data, c("dataset","method","K","num.recs"), summarize, m
 p <- ggplot(plot.data, aes(x=dataset, y=mean.recall))
 p <- p + geom_point(aes(color=method), size=1, show_guide=F)
 p <- p + geom_hline(aes(yintercept=mean.recall, colour=method, linetype=method), size=1, show_guide=T)
-p <- p + facet_wrap(~ dataset, nrow=1, scale="free")
+#p <- p + facet_wrap(~ dataset, nrow=1, scale="free")
 p <- p + xlab("") + ylab('Mean recall')
 p <- p + scale_y_continuous(labels=percent)
 p <- p + theme(legend.title=element_blank())
 p <- p + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank(), axis.title.x=element_blank())
-ggsave(p, filename=sprintf('../output/figures/mean_recall_at_%d.pdf', N), width=10, height=2.5)
+ggsave(p, filename=sprintf('../output/figures/mean_recall_at_%d.pdf', N), width=3, height=2.5)
 p
 
 
@@ -188,24 +188,26 @@ plot.data <- subset(precision.by.user, K==rank)
 plot.data <- ddply(plot.data, c("dataset","method","K","num.recs"), summarize, mean.precision=mean(precision))
 p <- ggplot(plot.data, aes(x=num.recs, y=mean.precision))
 p <- p + geom_line(aes(linetype=as.factor(method), colour=as.factor(method)))
-p <- p + xlab('Number of recommendations') + ylab('Mean normalized precision')
+p <- p + xlab('Number of recommendations') + ylab('Mean precision')
 p <- p + scale_x_continuous(breaks=c(10,50,100)) + scale_y_continuous(labels=percent)
 p <- p + theme(legend.title=element_blank())
-p <- p + facet_wrap(~ dataset, nrow=1, scale="free_y")
-ggsave(p, filename='../output/figures/mean_precision_by_num_recs.pdf', width=10, height=2.5)
+#p <- p + facet_wrap(~ dataset, nrow=1, scale="free_y")
+print(plot.data)
+ggsave(p, filename='../output/figures/mean_precision_by_num_recs.pdf', width=4, height=2.5)
 p
 
 
 # plot mean recall by number of recs for methods and datasets
 plot.data <- subset(recall.by.user, K==rank)
 plot.data <- ddply(plot.data, c("dataset","method","K","num.recs"), summarize, mean.recall=mean(recall))
+print(plot.data)
 p <- ggplot(plot.data, aes(x=num.recs, y=mean.recall))
 p <- p + geom_line(aes(linetype=as.factor(method), colour=as.factor(method)))
 p <- p + xlab('Number of recommendations') + ylab('Mean recall')
 p <- p + scale_x_continuous(breaks=c(10,50,100)) + scale_y_continuous(labels=percent)
 p <- p + theme(legend.title=element_blank())
 #p <- p + facet_wrap(~ dataset, nrow=1, scale="free_y")
-ggsave(p, filename='../output/figures/mean_recall_by_num_recs.pdf', width=10, height=2.5)
+ggsave(p, filename='../output/figures/mean_recall_by_num_recs.pdf', width=4, height=2.5)
 p
 
 
@@ -225,12 +227,12 @@ plot.data$X1 <- percentiles[plot.data$X1]
 names(plot.data) <- c("dataset","method","percentile","mean.precision")
 p <- ggplot(plot.data, aes(x=percentile, y=mean.precision))
 p <- p + geom_line(aes(color=method, linetype=method))
-p <- p + facet_wrap(~ dataset, nrow=1, scale="free_y")
+#p <- p + facet_wrap(~ dataset, nrow=1, scale="free_y")
 p <- p + scale_x_continuous(labels=percent, breaks=c(0.1, 0.5, 0.9))
 p <- p + scale_y_continuous(labels=percent)
-p <- p + xlab('User percentile by activity') + ylab('Mean normalized precision')
+p <- p + xlab('User percentile by activity') + ylab('Mean precision')
 p <- p + theme(legend.title=element_blank())
-ggsave(p, filename=sprintf('../output/figures/mean_precision_at_%d_by_user_percentile.pdf', N), width=10, height=2.5)
+ggsave(p, filename=sprintf('../output/figures/mean_precision_at_%d_by_user_percentile.pdf', N), width=4, height=2.5)
 p
 
 
@@ -251,7 +253,7 @@ p <- p + scale_x_continuous(labels=percent, breaks=c(0.1, 0.5, 0.9))
 p <- p + scale_y_continuous(labels=percent)
 p <- p + xlab('User percentile by activity') + ylab('Mean recall')
 p <- p + theme(legend.title=element_blank())
-ggsave(p, filename=sprintf('../output/figures/mean_recall_at_%d_by_user_percentile.pdf', N), width=10, height=2.5)
+ggsave(p, filename=sprintf('../output/figures/mean_recall_at_%d_by_user_percentile.pdf', N), width=4, height=2.5)
 p
 
 
