@@ -350,7 +350,6 @@ CollabTM::load_validation_and_test_sets()
   // users with at least 1 coldstart test items
   for (uint32_t nu = 0; nu < _nusers; ++nu) {
     const vector<uint32_t> *docs = _ratings.get_movies(nu);
-
     uint32_t x = 0;
     for (uint32_t j = 0; j < docs->size(); ++j) {
       uint32_t nd = (*docs)[j];
@@ -1787,7 +1786,7 @@ CollabTM::compute_likelihood(bool validation)
     else if (a > _prev_h)
       _nh = 0;
 
-    if (_nh > 3) { // be robust to small fluctuations in predictive likelihood
+    if (_nh > 1) { // be robust to small fluctuations in predictive likelihood
       why = 1;
       stop = true;
     }
