@@ -1,3 +1,8 @@
+Reference
+---------
+P. Gopalan, L. Charlin, D.M. Blei, Content-based recommendations with Poisson factorization, In submission.
+
+
 Installation
 ------------
 
@@ -7,6 +12,8 @@ On Linux/Unix run
 
  ./configure
  make; make install
+
+** Note: We have NOT tested the code on Mac. Please use Linux. **
 
 On Mac OS, the location of the required gsl, gslblas and pthread
 libraries may need to be specified:
@@ -33,6 +40,10 @@ COLLABTM: Nonnegative Collaborative Topic Modeling tool
     -k <int>                 latent dimensionality
 
     -fixeda                  fix the document length correction factor ('a') to 1
+    
+    -lda-init                use LDA based initialization (see below)
+    
+OPTIONAL:    
 
     -binary-data             treat observed ratings data as binary; if rating > 0 then rating is treated as 1
 
@@ -40,9 +51,21 @@ COLLABTM: Nonnegative Collaborative Topic Modeling tool
 
     -ratings-only            use ratings data only
 
-    -lda-init                use LDA based initialization (see below)
+EXPERIMENTAL:
 
     -seq-init -doc-only	     use sequential initialization for document only fits
+    
+    
+RECOMMENDED
+-----------
+
+We strongly recommend running CTPF using the following options:
+
+/disk/scratch1/prem/collabtm/src/collabtm -dir /disk/scratch1/prem/collabtm/analysis/mendeley -nusers 80278 -ndocs 261248 -nvocab 10000 -k 100 -lda-init -fixeda
+
+If the document lengths are expected to vary significantly, we recommend additionally running without the "-fixeda" option above.
+
+The above options depend on LDA-based fits being available for the document portion of the model. See below.
 
 INPUT 
 -----
