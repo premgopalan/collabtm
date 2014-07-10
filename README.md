@@ -50,6 +50,8 @@ OPTIONAL:
     -doc-only                use document data only
 
     -ratings-only            use ratings data only
+    
+    -content-only            use both data, but predict only with the topic affinities (i.e., topic offsets are 0)
 
 EXPERIMENTAL:
 
