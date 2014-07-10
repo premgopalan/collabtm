@@ -53,7 +53,10 @@ OPTIONAL:
 
 EXPERIMENTAL:
 
+    -online                  use stochastic variational inference
+    
     -seq-init -doc-only	     use sequential initialization for document only fits
+    
     
     
 RECOMMENDED
