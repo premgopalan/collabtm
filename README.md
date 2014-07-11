@@ -64,7 +64,7 @@ EXPERIMENTAL:
 RECOMMENDED
 -----------
 
-We strongly recommend running CTPF using the following options:
+We recommend running CTPF using the following options:
 
 /disk/scratch1/prem/collabtm/src/collabtm -dir /disk/scratch1/prem/collabtm/analysis/mendeley -nusers 80278 -ndocs 261248 -nvocab 10000 -k 100 -lda-init -fixeda
 
