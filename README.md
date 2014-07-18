@@ -88,11 +88,11 @@ Each line of vocab.dat is a word. Note that both the word index and the document
 EXAMPLE
 -------
 
-Run two versions -- with the correction scalar 'a' inferred and one with 'a' fixed at a 1.  One of these fits might be better than the other. 
+Run two versions -- with the correction scalar 'a' inferred and one with 'a' fixed at a 1.  One of these fits might be better than the other. ***Always use LDA-based initialization.***
 
-~/src/collabtm -dir <path-to>/mendeley -nusers 80278 -ndocs 261248 -nvocab 10000 -k 100
+~/src/collabtm -dir <path-to>/mendeley -nusers 80278 -ndocs 261248 -nvocab 10000 -k 100 -lda-init
 
-~/src/collabtm -dir <path-to>/mendeley -nusers 80278 -ndocs 261248 -nvocab 10000 -k 100 -fixeda 
+~/src/collabtm -dir <path-to>/mendeley -nusers 80278 -ndocs 261248 -nvocab 10000 -k 100 -fixeda -lda-init
 
 
 LDA BASED INITIALIZATION
