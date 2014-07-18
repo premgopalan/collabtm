@@ -13,7 +13,7 @@ On Linux/Unix run
  ./configure
  make; make install
 
-** Note: We have NOT tested the code on Mac. Please use Linux. **
+***Note: We have NOT tested the code on Mac. Please use Linux.***
 
 On Mac OS, the location of the required gsl, gslblas and pthread
 libraries may need to be specified:
