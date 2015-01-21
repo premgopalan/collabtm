@@ -2318,10 +2318,10 @@ CollabTM::coldstart_rating_likelihood()
       assert (y > 0);
 
       // note: need docseq whenever looking up "cstheta"
-      double u = per_rating_likelihood(nu, nd, y, true);
-      s += u;
+      double l = per_rating_likelihood(nu, nd, y, true);
+      s += l;
       k += 1;
-      ss += u;
+      ss += l;
       kk += 1;
     }
     

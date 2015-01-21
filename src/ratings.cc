@@ -338,8 +338,8 @@ Ratings::read_mendeley(string dir)
       continue;
     }
     
-    for (uint32_t m = 0; m < mids.size(); ++m) {
-      uint32_t mid = mids[m];
+    for (uint32_t i = 0; i < mids.size(); ++i) {
+      uint32_t mid = mids[i];
       IDMap::iterator mt = _movie2seq.find(mid);
       if (mt == _movie2seq.end() && !add_movie(mid)) {
 	//printf("error: exceeded movie limit %d, %d, %d\n",
