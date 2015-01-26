@@ -75,9 +75,18 @@ The above options depend on LDA-based fits being available for the document port
 INPUT 
 -----
 
-We need the same files used by the basic factorization model.
+The following files must be present in the data directory (as indicated by the
+'-dir' switch): 
 
 train.tsv, test.tsv, validation.tsv, test_users.tsv
+
+train/valid/test files contain triplets in the following format (one per line): 
+userID itemID rating
+
+where tab characters separate the fields. 
+
+test_users.tsv contains the userIDs of all users that are tested on (one per
+line). 
 
 The new files additionally needed are mult.dat and vocab.dat.  (They are really text files.) This is the "document" portion of the data. Each line of mult.dat is a document and has the following format:
 
