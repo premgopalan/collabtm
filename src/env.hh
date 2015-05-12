@@ -72,7 +72,7 @@ public:
       bool lda_init, bool ppc, 
       bool seq_init, bool seq_init_samples,
       bool fixed_doc_param, bool phased, bool content_only,
-      bool decoupled);
+      bool decoupled, double heldout_items_ratio);
 
   ~Env() { fclose(_plogf); }
 
@@ -228,7 +228,7 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
 	 bool lda_initv, bool ppcv,
 	 bool seq_initv, bool seq_init_samplesv,
 	 bool fixed_doc_paramv, bool phasedv, bool content_onlyv,
-	 bool decoupledv)
+	 bool decoupledv, double heldout_items_ratiov)
   : dataset(datasetv),
     ndocs(ndocs_v),
     nvocab(nvocab_v),
@@ -237,7 +237,7 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
     tau0(0),
     tau1(0),
     heldout_ratio(0.2),
-    heldout_items_ratio(0.01),
+    heldout_items_ratio(heldout_items_ratiov),
     validation_ratio(0.01),
     reportfreq(rfreq),
     epsilon(0.001),

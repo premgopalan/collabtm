@@ -268,132 +268,136 @@ CollabTM::load_validation_and_test_sets()
   Env::plog("validation ratings before removing heldout cold start docs", _validation_map.size());
   Env::plog("cold start docs", _env.heldout_items_ratio * _env.ndocs); 
 
-  uint32_t c = 0;
-  while (c < _env.heldout_items_ratio * _env.ndocs) {
-    uint32_t n = gsl_rng_uniform_int(_r, _env.ndocs);
-    const vector<uint32_t> *u = _ratings.get_users(n);
-    assert(u);
-    uint32_t nusers = u->size();
-    if (nusers < 10)
-      continue;
-    _cold_start_docs[n] = true;
-    c++;
-  }
-  Env::plog("number of heldout cold start docs", _cold_start_docs.size());
+  if (_env.heldout_items_ratio > 0 ) { 
 
-  // create sequence ids for cold start docs
-  _ncsdoc_seq = 0;
-  for (MovieMap::const_iterator i = _cold_start_docs.begin(); 
-       i != _cold_start_docs.end(); ++i) {
-    _doc_to_cs_idmap[i->first] = _ncsdoc_seq++;
-  }
+    uint32_t c = 0;
+    while (c < _env.heldout_items_ratio * _env.ndocs) {
+      uint32_t n = gsl_rng_uniform_int(_r, _env.ndocs);
+      const vector<uint32_t> *u = _ratings.get_users(n);
+      assert(u);
+      uint32_t nusers = u->size();
+      if (nusers < 10)
+        continue;
+      _cold_start_docs[n] = true;
+      c++;
+    }
+    Env::plog("number of heldout cold start docs", _cold_start_docs.size());
 
-  CountMap::iterator i = _test_map.begin(); 
-  while (i != _test_map.end()) {
-    const Rating &r = i->first;
-    MovieMap::const_iterator itr = _cold_start_docs.find(r.second);
-    if (itr != _cold_start_docs.end()) {
-      debug("test: erasing rating r (%d,%d) in heldout cold start", 
-	    _ratings.to_user_id(r.first), 
-	    _ratings.to_movie_id(r.second));
-      _test_map.erase(i++);
-    } else
-      ++i;
-  }
+    // create sequence ids for cold start docs
+    _ncsdoc_seq = 0;
+    for (MovieMap::const_iterator i = _cold_start_docs.begin(); 
+        i != _cold_start_docs.end(); ++i) {
+      _doc_to_cs_idmap[i->first] = _ncsdoc_seq++;
+    }
 
-  FILE *g = fopen(Env::file_str("/in-test.tsv").c_str(), "w");
-  for (CountMap::const_iterator i = _test_map.begin(); i != _test_map.end(); ++i) {
-    const Rating &r = i->first;
-    fprintf(g, "%d\t%d\n", _ratings.to_user_id(r.first), 
-	    _ratings.to_movie_id(r.second));
-  }
-  fflush(g);
-  fclose(g);
-  
-  g = fopen(Env::file_str("/in-train.tsv").c_str(), "w");
-  for (uint32_t nu = 0; nu < _nusers; ++nu) {
-    const vector<uint32_t> *docs = _ratings.get_movies(nu);
-    uint32_t x = 0;
-    for (uint32_t j = 0; j < docs->size(); ++j) {
-      uint32_t nd = (*docs)[j];
-      MovieMap::const_iterator mp = _cold_start_docs.find(nd);
-      if (mp != _cold_start_docs.end()) { 
-	continue;
+    CountMap::iterator i = _test_map.begin(); 
+    while (i != _test_map.end()) {
+      const Rating &r = i->first;
+      MovieMap::const_iterator itr = _cold_start_docs.find(r.second);
+      if (itr != _cold_start_docs.end()) {
+        debug("test: erasing rating r (%d,%d) in heldout cold start", 
+            _ratings.to_user_id(r.first), 
+            _ratings.to_movie_id(r.second));
+        _test_map.erase(i++);
+      } else
+        ++i;
+    }
+
+    FILE *g = fopen(Env::file_str("/in-test.tsv").c_str(), "w");
+    for (CountMap::const_iterator i = _test_map.begin(); i != _test_map.end(); ++i) {
+      const Rating &r = i->first;
+      fprintf(g, "%d\t%d\n", _ratings.to_user_id(r.first), 
+          _ratings.to_movie_id(r.second));
+    }
+    fflush(g);
+    fclose(g);
+
+    g = fopen(Env::file_str("/in-train.tsv").c_str(), "w");
+    for (uint32_t nu = 0; nu < _nusers; ++nu) {
+      const vector<uint32_t> *docs = _ratings.get_movies(nu);
+      uint32_t x = 0;
+      for (uint32_t j = 0; j < docs->size(); ++j) {
+        uint32_t nd = (*docs)[j];
+        MovieMap::const_iterator mp = _cold_start_docs.find(nd);
+        if (mp != _cold_start_docs.end()) { 
+          continue;
+        }
+        x++;
       }
-      x++;
+      if (x == 0)
+        continue;   // all docs in cold start for this user; skip
     }
-    if (x == 0)
-      continue;   // all docs in cold start for this user; skip
-  }
-  fflush(g);
-  fclose(g);
-  
-  CountMap::iterator j = _validation_map.begin(); 
-  while (j != _validation_map.end()) {
-    const Rating &r = j->first;
-    MovieMap::const_iterator itr = _cold_start_docs.find(r.second);
-    if (itr != _cold_start_docs.end()) {
-      debug("validation: erasing rating r (%d,%d) in heldout cold start", 
-	    _ratings.to_user_id(r.first), 
-	    _ratings.to_movie_id(r.second));
-      _validation_map.erase(j++);
-    } else
-      ++j;
-  }
-  Env::plog("test ratings after", _test_map.size());
-  Env::plog("validation ratings after", _validation_map.size());
+    fflush(g);
+    fclose(g);
 
-  g = fopen(Env::file_str("/coldstart_docs.tsv").c_str(), "w");
-  write_coldstart_docs(g, _cold_start_docs);
-  fclose(g);
+    CountMap::iterator j = _validation_map.begin(); 
+    while (j != _validation_map.end()) {
+      const Rating &r = j->first;
+      MovieMap::const_iterator itr = _cold_start_docs.find(r.second);
+      if (itr != _cold_start_docs.end()) {
+        debug("validation: erasing rating r (%d,%d) in heldout cold start", 
+            _ratings.to_user_id(r.first), 
+            _ratings.to_movie_id(r.second));
+        _validation_map.erase(j++);
+      } else
+        ++j;
+    }
+    Env::plog("test ratings after", _test_map.size());
+    Env::plog("validation ratings after", _validation_map.size());
 
-  // users with at least 1 coldstart test items
-  for (uint32_t nu = 0; nu < _nusers; ++nu) {
-    const vector<uint32_t> *docs = _ratings.get_movies(nu);
-    uint32_t x = 0;
-    for (uint32_t j = 0; j < docs->size(); ++j) {
-      uint32_t nd = (*docs)[j];
-      MovieMap::const_iterator mp = _cold_start_docs.find(nd);
-      if (mp != _cold_start_docs.end()) {
-	_cs_users.push_back(nu);
-	break;
+    g = fopen(Env::file_str("/coldstart_docs.tsv").c_str(), "w");
+    write_coldstart_docs(g, _cold_start_docs);
+    fclose(g);
+
+    // users with at least 1 coldstart test items
+    for (uint32_t nu = 0; nu < _nusers; ++nu) {
+      const vector<uint32_t> *docs = _ratings.get_movies(nu);
+      uint32_t x = 0;
+      for (uint32_t j = 0; j < docs->size(); ++j) {
+        uint32_t nd = (*docs)[j];
+        MovieMap::const_iterator mp = _cold_start_docs.find(nd);
+        if (mp != _cold_start_docs.end()) {
+          _cs_users.push_back(nu);
+          break;
+        }
       }
     }
-  }
 
-  _cs_test_users = new uArray(_cs_users.size());
-  for (uint32_t i = 0; i < _cs_users.size(); ++i)
-    (*_cs_test_users)[i] = _cs_users[i];
-  gsl_ran_shuffle(_r, (void *)&((*_cs_test_users)[0]), _cs_users.size(), sizeof(uint32_t));
+    _cs_test_users = new uArray(_cs_users.size());
+    for (uint32_t i = 0; i < _cs_users.size(); ++i)
+      (*_cs_test_users)[i] = _cs_users[i];
+    gsl_ran_shuffle(_r, (void *)&((*_cs_test_users)[0]), _cs_users.size(), sizeof(uint32_t));
 
-  g = fopen(Env::file_str("/coldstart_test_users.tsv").c_str(), "w");
-  uint32_t cc = 0;
-  for (uint32_t i = 0; i < _cs_users.size() && i < 10000; ++i, cc++)
-    fprintf(g, "%d\n", _ratings.to_user_id((*_cs_test_users)[i]));
-  fflush(g);
-  fclose(g);
+    g = fopen(Env::file_str("/coldstart_test_users.tsv").c_str(), "w");
+    uint32_t cc = 0;
+    for (uint32_t i = 0; i < _cs_users.size() && i < 10000; ++i, cc++)
+      fprintf(g, "%d\n", _ratings.to_user_id((*_cs_test_users)[i]));
+    fflush(g);
+    fclose(g);
 
-  FILE * outf = fopen(Env::file_str("/coldstart_test.tsv").c_str(), "w");
-  for (uint32_t nu = 0; nu < _nusers; ++nu) {
-    const vector<uint32_t> *docs = _ratings.get_movies(nu);
-    for (uint32_t j = 0; j < docs->size(); ++j) {
-      uint32_t nd = (*docs)[j];
-      
-      MovieMap::const_iterator mp = _cold_start_docs.find(nd);
-      if (mp == _cold_start_docs.end())
-	continue;
+    FILE * outf = fopen(Env::file_str("/coldstart_test.tsv").c_str(), "w");
+    for (uint32_t nu = 0; nu < _nusers; ++nu) {
+      const vector<uint32_t> *docs = _ratings.get_movies(nu);
+      for (uint32_t j = 0; j < docs->size(); ++j) {
+        uint32_t nd = (*docs)[j];
 
-      yval_t y = _ratings.r(nu,nd);
-      Rating r(nu,nd);
-      _coldstart_test_map[r] = y;
-      fprintf(outf, "%d\t%d\t%d\n", _ratings.to_user_id(nu), _ratings.to_movie_id(nd), y);
+        MovieMap::const_iterator mp = _cold_start_docs.find(nd);
+        if (mp == _cold_start_docs.end())
+          continue;
+
+        yval_t y = _ratings.r(nu,nd);
+        Rating r(nu,nd);
+        _coldstart_test_map[r] = y;
+        fprintf(outf, "%d\t%d\t%d\n", _ratings.to_user_id(nu), _ratings.to_movie_id(nd), y);
+      }
     }
-  }
-  fclose(outf);
+    fclose(outf);
 
-  Env::plog("cs test ratings size", _coldstart_test_map.size());
-  Env::plog("cs total users size", _cs_users.size());
-  Env::plog("cs test users size", cc);
+    Env::plog("cs test ratings size", _coldstart_test_map.size());
+    Env::plog("cs total users size", _cs_users.size());
+    Env::plog("cs test users size", cc);
+
+  }
 }
 
 void
@@ -462,11 +466,13 @@ CollabTM::gen_ranking_for_users()
   if (_env.use_docs) {
     printf("coldstart local inference and HOL\n"); fflush(stdout);
     lerr("computing coldstart...");
-    coldstart_local_inference();
-    coldstart_rating_likelihood();
-    printf("done\n");
-    printf("coldstart precision\n"); fflush(stdout);
-    coldstart_precision();
+    if (_env.heldout_items_ratio != 0.) {
+      coldstart_local_inference();
+      coldstart_rating_likelihood();
+      printf("done\n");
+      printf("coldstart precision\n"); fflush(stdout);
+      coldstart_precision();
+    }
   }
   printf("done\n");
   printf("DONE writing ranking.tsv in output directory\n");
@@ -503,11 +509,13 @@ CollabTM::do_on_stop()
   if (_env.use_docs) {
     printf("coldstart local inference and HOL\n"); fflush(stdout);
     lerr("computing coldstart...");
-    coldstart_local_inference();
-    coldstart_rating_likelihood();
-    printf("done\n");
-    printf("coldstart precision\n"); fflush(stdout);
-    coldstart_precision();
+    if (_env.heldout_items_ratio != 0.) {
+      coldstart_local_inference();
+      coldstart_rating_likelihood();
+      printf("done\n");
+      printf("coldstart precision\n"); fflush(stdout);
+      coldstart_precision();
+    }
   }
   printf("done\n");
   printf("DONE writing ranking.tsv in output directory\n");

@@ -54,6 +54,7 @@ main(int argc, char **argv)
   bool batch = true;
   bool online = false;
   bool gen_heldout = false;
+  double heldout_items_ratio = 0.1;
 
   bool model_load = false;
   string model_location = "";
@@ -144,6 +145,9 @@ main(int argc, char **argv)
     } else if (strcmp(argv[i], "-gen-heldout") == 0) {
       gen_heldout = true;
       fprintf(stdout, "+ generate held-out files from dataset\n");
+    } else if (strcmp(argv[i], "-heldout-items-ratio") == 0)  {
+      heldout_items_ratio = atof(argv[++i]);
+      fprintf(stdout, "+ heldout items ratio %f\n", heldout_items_ratio);
     } else if (strcmp(argv[i], "-pred-accuracy") == 0) {
       pred_accuracy = true;
       fprintf(stdout, "+ compute predictive accuracy\n");
@@ -216,7 +220,7 @@ main(int argc, char **argv)
 	  use_docs, use_ratings, perturb_only_beta_shape,
 	  lda_init, ppc, seq_init, seq_init_samples,
 	  fixed_doc_param, phased, content_only,
-	  decoupled);
+	  decoupled, heldout_items_ratio);
   
   env_global = &env;
   if (p) {
