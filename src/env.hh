@@ -376,6 +376,7 @@ Env::Env(uint32_t ndocs_v, uint32_t nvocab_v,
   plog("fixed_doc_param", fixed_doc_param); 
   plog("content_only", content_only);
   plog("decoupled", decoupled);
+  plog("datfname", datfname);
  
   //string ndatfname = file_str("/network.dat");
   //unlink(ndatfname.c_str());
