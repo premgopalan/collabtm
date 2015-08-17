@@ -338,7 +338,7 @@ GPMatrix::save_state(const IDMap &m) const
 {
   string expv_fname = string("/") + name() + ".tsv";
   string shape_fname = string("/") + name() + "_shape.tsv";
-  string rate_fname = string("/") + name() + "_scale.tsv";
+  string rate_fname = string("/") + name() + "_rate.tsv";
   _scurr.save(Env::file_str(shape_fname), m);
   _rcurr.save(Env::file_str(rate_fname), m);
   _Ev.save(Env::file_str(expv_fname), m);
@@ -348,7 +348,7 @@ inline void
 GPMatrix::load()
 {
   string shape_fname = name() + "_shape.tsv";
-  string rate_fname = name() + "_scale.tsv";
+  string rate_fname = name() + "_rate.tsv";
   _scurr.load(shape_fname);
   _rcurr.load(rate_fname);
   compute_expectations();
@@ -666,7 +666,7 @@ GPMatrixGR::save_state(const IDMap &m) const
 {
   string expv_fname = string("/") + name() + ".tsv";
   string shape_fname = string("/") + name() + "_shape.tsv";
-  string rate_fname = string("/") + name() + "_scale.tsv";
+  string rate_fname = string("/") + name() + "_rate.tsv";
   _scurr.save(Env::file_str(shape_fname), m);
   _rcurr.save(Env::file_str(rate_fname), m);
   _Ev.save(Env::file_str(expv_fname), m);
@@ -676,7 +676,7 @@ inline void
 GPMatrixGR::load()
 {
   string shape_fname = name() + "_shape.tsv";
-  string rate_fname = name() + "_scale.tsv";
+  string rate_fname = name() + "_rate.tsv";
   _scurr.load(shape_fname);
   _rcurr.load(rate_fname);
   compute_expectations();
@@ -887,7 +887,7 @@ GPArray::save_state(const IDMap &m) const
 {
   string expv_fname = string("/") + name() + ".tsv";
   string shape_fname = string("/") + name() + "_shape.tsv";
-  string rate_fname = string("/") + name() + "_scale.tsv";
+  string rate_fname = string("/") + name() + "_rate.tsv";
   _scurr.save(Env::file_str(shape_fname), m);
   _rcurr.save(Env::file_str(rate_fname), m);
   _Ev.save(Env::file_str(expv_fname), m);
@@ -897,7 +897,7 @@ inline void
 GPArray::load()
 {
   string shape_fname = name() + "_shape.tsv";
-  string rate_fname = name() + "_scale.tsv";
+  string rate_fname = name() + "_rate.tsv";
   _scurr.load(shape_fname);
   _rcurr.load(rate_fname);
   compute_expectations();
