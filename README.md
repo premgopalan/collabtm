@@ -1,6 +1,8 @@
 Reference
 ---------
-P. Gopalan, L. Charlin, D.M. Blei, Content-based recommendations with Poisson factorization, In submission.
+P. Gopalan, L. Charlin, D.M. Blei, Content-based recommendations with Poisson factorization, NIPS 2014.
+
+[Paper PDF](https://papers.nips.cc/paper/5360-content-based-recommendations-with-poisson-factorization.pdf)
 
 
 Installation
